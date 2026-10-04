@@ -1,0 +1,376 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-inter-tight), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-hand: var(--font-caveat), "Segoe Print", cursive;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-heading: var(--font-display);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* µPrep brand */
+  --color-ink: var(--ink);
+  --color-surface: var(--surface);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-lime: var(--lime);
+  --color-lime-strong: var(--lime-strong);
+  --color-lime-soft: var(--lime-soft);
+  --color-lime-border: var(--lime-border);
+  --color-lime-chip: var(--lime-chip);
+  --color-sticky: var(--sticky);
+  --color-mu: var(--mu);
+  --color-chip: var(--chip);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  --shadow-card: 0 1px 2px rgb(16 24 16 / 0.04), 0 1px 1px rgb(16 24 16 / 0.02);
+  --shadow-lift: 0 10px 30px -12px rgb(30 60 20 / 0.22), 0 2px 6px rgb(16 24 16 / 0.05);
+  --shadow-float: 0 18px 40px -16px rgb(16 24 16 / 0.28);
+
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+:root {
+  --background: #f8f9f2;
+  --foreground: #0e1512;
+  --card: #ffffff;
+  --card-foreground: #0e1512;
+  --popover: #ffffff;
+  --popover-foreground: #0e1512;
+  --primary: #101912;
+  --primary-foreground: #ffffff;
+  --secondary: #eff2e8;
+  --secondary-foreground: #0e1512;
+  --muted: #f1f3ec;
+  --muted-foreground: #6a7166;
+  --accent: #eaf6de;
+  --accent-foreground: #17451c;
+  --destructive: #d4351c;
+  --border: #e5e8de;
+  --input: #dde2d4;
+  --ring: #93d16a;
+  --radius: 0.625rem;
+
+  --chart-1: #1e951f;
+  --chart-2: #8fd45e;
+  --chart-3: #0e1512;
+  --chart-4: #c6f096;
+  --chart-5: #6a7166;
+
+  --sidebar: #fbfcf8;
+  --sidebar-foreground: #0e1512;
+  --sidebar-primary: #101912;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eaf6de;
+  --sidebar-accent-foreground: #17451c;
+  --sidebar-border: #e5e8de;
+  --sidebar-ring: #93d16a;
+
+  --ink: #0e1512;
+  --surface: #fbfcf8;
+  --brand: #1e951f;
+  --brand-strong: #157a18;
+  --lime: #a8e472;
+  --lime-strong: #8fd45e;
+  --lime-soft: #eaf6de;
+  --lime-border: #96c47a;
+  --lime-chip: #c6f096;
+  --sticky: #e6f9a6;
+  --mu: #6ff93f;
+  --chip: #eef0e9;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01", "ss03";
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--lime-chip);
+    color: var(--ink);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display;
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+}
+
+@layer components {
+  /* Small green dash that sits above section titles in the mockup */
+  .section-mark {
+    @apply block h-[3px] w-6 rounded-full bg-lime-border;
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, rgb(150 180 120 / 0.16) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(150 180 120 / 0.16) 1px, transparent 1px);
+    background-size: 26px 26px;
+  }
+
+  .paper-lines {
+    background-color: #fffef9;
+    background-image:
+      linear-gradient(to right, transparent 13px, rgb(236 120 120 / 0.28) 13px, rgb(236 120 120 / 0.28) 14px, transparent 14px),
+      repeating-linear-gradient(to bottom, transparent 0, transparent 9px, rgb(120 150 200 / 0.18) 9px, rgb(120 150 200 / 0.18) 10px);
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  .container-page {
+    @apply mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8;
+  }
+
+  .card-surface {
+    @apply rounded-xl border border-border bg-card shadow-card;
+  }
+
+  .interactive-card {
+    @apply rounded-xl border border-border bg-card shadow-card transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-lime-border hover:shadow-lift focus-visible:-translate-y-0.5 focus-visible:border-lime-border focus-visible:shadow-lift focus-visible:outline-none;
+  }
+
+  .chip {
+    @apply inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-chip px-3.5 text-[13px] font-medium text-foreground/80 transition-colors hover:bg-lime-soft hover:text-ink;
+  }
+  .chip[data-active="true"] {
+    @apply bg-lime-chip text-ink;
+  }
+
+  .select-tile {
+    @apply rounded-xl border border-border bg-card shadow-card transition-[border-color,background-color,box-shadow] duration-200 hover:border-lime-border hover:shadow-lift;
+  }
+  .select-tile[data-active="true"] {
+    @apply border-lime-border bg-lime-soft shadow-none ring-1 ring-lime-border;
+  }
+}
+
+/* ───────────────────────── Brand loader: the µ writes itself ───────────────────────── */
+.mu-loader {
+  --mu-cycle: 1.9s;
+}
+.mu-loader--sm {
+  --mu-cycle: 1.35s;
+}
+.mu-loader .mu-stroke-a,
+.mu-loader .mu-stroke-b {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: var(--mu-cycle) cubic-bezier(0.45, 0, 0.2, 1) infinite both;
+}
+.mu-loader .mu-stroke-a {
+  animation-name: mu-write-a;
+}
+.mu-loader .mu-stroke-b {
+  animation-name: mu-write-b;
+}
+.mu-loader .mu-disc {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mu-disc var(--mu-cycle) cubic-bezier(0.34, 1.4, 0.64, 1) infinite both;
+}
+.mu-loader .mu-ripple {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mu-ripple var(--mu-cycle) ease-out infinite both;
+}
+@keyframes mu-write-a {
+  0% { stroke-dashoffset: 1; opacity: 1; }
+  36% { stroke-dashoffset: 0; }
+  86% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes mu-write-b {
+  0%, 26% { stroke-dashoffset: 1; opacity: 1; }
+  70% { stroke-dashoffset: 0; }
+  86% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes mu-disc {
+  0%, 100% { transform: scale(0.9); }
+  70%, 88% { transform: scale(1); }
+}
+@keyframes mu-ripple {
+  0%, 68% { transform: scale(1); opacity: 0; }
+  72% { opacity: 0.6; }
+  100% { transform: scale(1.38); opacity: 0; }
+}
+.loader-reveal {
+  animation: loader-reveal 0.35s ease-out 0.12s both;
+}
+@keyframes loader-reveal {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ───────────────────────── Navigation progress ───────────────────────── */
+.nav-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 100;
+  height: 3px;
+  pointer-events: none;
+  transform-origin: left;
+  background: linear-gradient(90deg, var(--lime-strong), var(--mu) 60%, var(--brand));
+  box-shadow: 0 0 10px rgb(111 249 63 / 0.55);
+  transition: transform 0.25s ease, opacity 0.3s ease 0.15s;
+}
+
+/* ───────────────────────── Page transitions (View Transitions API) ───────────────────────── */
+::view-transition {
+  pointer-events: none;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-group(site-header) {
+  animation: none;
+  z-index: 50;
+}
+::view-transition-old(site-header) {
+  display: none;
+}
+::view-transition-new(site-header) {
+  animation: none;
+}
+::view-transition-old(.page-out) {
+  animation: 110ms ease-in both vt-fade-out;
+}
+::view-transition-new(.page-in) {
+  animation: 260ms cubic-bezier(0.22, 1, 0.36, 1) 50ms both vt-rise-in;
+}
+::view-transition-group(.nav-indicator) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes vt-fade-out {
+  to { opacity: 0; }
+}
+@keyframes vt-rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+}
+
+/* Gentle staggered entrance for card grids (first paint only). */
+.stagger > * {
+  animation: stagger-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > *:nth-child(2) { animation-delay: 35ms; }
+.stagger > *:nth-child(3) { animation-delay: 70ms; }
+.stagger > *:nth-child(4) { animation-delay: 105ms; }
+.stagger > *:nth-child(5) { animation-delay: 140ms; }
+.stagger > *:nth-child(6) { animation-delay: 175ms; }
+.stagger > *:nth-child(7) { animation-delay: 210ms; }
+.stagger > *:nth-child(n + 8) { animation-delay: 240ms; }
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(8px); }
+}
+.swap-in {
+  animation: swap-in 0.22s ease-out both;
+}
+@keyframes swap-in {
+  from { opacity: 0.35; transform: translateY(3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  /* Show the finished mark with a calm pulse instead of the writing animation. */
+  .mu-loader .mu-stroke-a,
+  .mu-loader .mu-stroke-b {
+    stroke-dashoffset: 0;
+    animation: none !important;
+  }
+  .mu-loader {
+    animation: mu-calm 1.6s ease-in-out infinite !important;
+    animation-duration: 1.6s !important;
+  }
+  @keyframes mu-calm {
+    50% { opacity: 0.55; }
+  }
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}

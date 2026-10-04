@@ -1,0 +1,756 @@
+-- =============================================================================
+-- µPrep — Notes hub schema
+-- Departments → Subjects (per semester, shared across departments) → Resources
+-- Public read access is anonymous; every write goes through an admin session
+-- (RLS) or the service role (server actions with their own validation).
+-- =============================================================================
+
+create extension if not exists pg_trgm with schema extensions;
+
+-- -----------------------------------------------------------------------------
+-- Helpers
+-- -----------------------------------------------------------------------------
+
+-- array_to_string is only STABLE; generated columns need an IMMUTABLE wrapper.
+create or replace function public.immutable_array_to_string(arr text[], sep text)
+returns text
+language sql
+immutable
+parallel safe
+set search_path = ''
+as $$ select coalesce(pg_catalog.array_to_string(arr, sep), '') $$;
+
+create or replace function public.tg_set_updated_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.updated_at := now();
+  return new;
+end
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Admins
+-- -----------------------------------------------------------------------------
+
+create table public.admins (
+  user_id uuid primary key references auth.users (id) on delete cascade,
+  email text not null,
+  role text not null default 'editor' check (role in ('owner', 'editor')),
+  created_at timestamptz not null default now()
+);
+
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (select 1 from public.admins where user_id = (select auth.uid()));
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Departments & subjects
+-- -----------------------------------------------------------------------------
+
+create table public.departments (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique check (slug ~ '^[a-z0-9-]+$'),
+  code text not null check (char_length(code) between 1 and 16),
+  name text not null check (char_length(name) between 1 and 120),
+  icon text not null default 'laptop',
+  sort_order int not null default 0,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table public.subjects (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique check (slug ~ '^[a-z0-9-]+$'),
+  name text not null check (char_length(name) between 1 and 160),
+  short_name text,
+  code text,
+  semester smallint not null check (semester between 1 and 8),
+  description text,
+  icon text not null default 'book-open',
+  credits smallint check (credits between 0 and 20),
+  -- [{ "n": 1, "title": "Sets, Relations and Functions" }, ...]
+  modules jsonb not null default '[]'::jsonb check (jsonb_typeof(modules) = 'array'),
+  -- extra search aliases: "dbms", "m1", "c programming"
+  keywords text[] not null default '{}',
+  is_active boolean not null default true,
+  sort_order int not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index subjects_semester_idx on public.subjects (semester, sort_order);
+create index subjects_code_idx on public.subjects (upper(code));
+create index subjects_name_trgm_idx on public.subjects using gin (name extensions.gin_trgm_ops);
+
+create trigger subjects_set_updated_at
+  before update on public.subjects
+  for each row execute function public.tg_set_updated_at();
+
+create table public.subject_departments (
+  subject_id uuid not null references public.subjects (id) on delete cascade,
+  department_id uuid not null references public.departments (id) on delete cascade,
+  primary key (subject_id, department_id)
+);
+
+create index subject_departments_department_idx on public.subject_departments (department_id);
+
+-- -----------------------------------------------------------------------------
+-- Resources (notes, papers, lab records, ...)
+-- -----------------------------------------------------------------------------
+
+create type public.resource_type as enum (
+  'notes', 'pyq', 'lab', 'assignment', 'qbank', 'syllabus', 'other'
+);
+
+create type public.resource_status as enum ('published', 'draft', 'pending', 'rejected');
+
+create table public.resources (
+  id uuid primary key default gen_random_uuid(),
+  subject_id uuid not null references public.subjects (id) on delete cascade,
+  title text not null check (char_length(title) between 1 and 200),
+  description text,
+  type public.resource_type not null default 'notes',
+  module smallint check (module between 1 and 12), -- null = full syllabus / all modules
+  tags text[] not null default '{}',
+  exam_year smallint check (exam_year between 1990 and 2100),
+  exam_session text,
+  author text,
+  is_verified boolean not null default false,
+  is_featured boolean not null default false,
+  status public.resource_status not null default 'published',
+
+  -- An uploaded file (UploadThing) or an external link
+  file_key text,
+  file_url text,
+  file_name text,
+  file_size bigint,
+  mime_type text,
+  file_hash text,
+  page_count int,
+  thumbnail_key text,
+  thumbnail_url text,
+  external_url text,
+
+  -- Public credit for community submissions (contact details live in submission_details)
+  contributor_name text,
+
+  view_count int not null default 0,
+  download_count int not null default 0,
+  created_by uuid references auth.users (id) on delete set null,
+  published_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint resources_has_source check (file_url is not null or external_url is not null),
+
+  fts tsvector generated always as (
+    setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+    setweight(to_tsvector('english', public.immutable_array_to_string(tags, ' ')), 'B') ||
+    setweight(
+      to_tsvector(
+        'english',
+        coalesce(description, '') || ' ' || coalesce(author, '') || ' ' || coalesce(exam_session, '')
+      ),
+      'C'
+    )
+  ) stored
+);
+
+create index resources_subject_status_idx on public.resources (subject_id, status);
+create index resources_status_published_idx on public.resources (status, published_at desc);
+create index resources_type_idx on public.resources (type);
+create index resources_file_hash_idx on public.resources (file_hash);
+create index resources_fts_idx on public.resources using gin (fts);
+create index resources_title_trgm_idx on public.resources using gin (title extensions.gin_trgm_ops);
+
+-- Keep updated_at meaningful (ignore counter bumps) and stamp published_at once.
+create or replace function public.tg_resources_before_write()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  ignored text[] := array['view_count', 'download_count', 'updated_at', 'fts'];
+begin
+  if tg_op = 'UPDATE' then
+    if (to_jsonb(new) - ignored) is distinct from (to_jsonb(old) - ignored) then
+      new.updated_at := now();
+    end if;
+    if new.status = 'published' and old.status is distinct from 'published' and new.published_at is null then
+      new.published_at := now();
+    end if;
+  elsif new.status = 'published' and new.published_at is null then
+    new.published_at := now();
+  end if;
+  return new;
+end
+$$;
+
+create trigger resources_before_write
+  before insert or update on public.resources
+  for each row execute function public.tg_resources_before_write();
+
+-- Private details captured with community submissions (admin-only)
+create table public.submission_details (
+  resource_id uuid primary key references public.resources (id) on delete cascade,
+  contributor_contact text,
+  contributor_note text,
+  ip_hash text,
+  created_at timestamptz not null default now()
+);
+
+create index submission_details_ip_idx on public.submission_details (ip_hash, created_at);
+
+-- -----------------------------------------------------------------------------
+-- Engagement, feedback and settings
+-- -----------------------------------------------------------------------------
+
+create table public.resource_events (
+  id bigint generated always as identity primary key,
+  resource_id uuid not null references public.resources (id) on delete cascade,
+  kind text not null check (kind in ('view', 'download')),
+  created_at timestamptz not null default now()
+);
+
+create index resource_events_created_idx on public.resource_events (created_at);
+create index resource_events_resource_idx on public.resource_events (resource_id, kind, created_at);
+
+create table public.note_requests (
+  id uuid primary key default gen_random_uuid(),
+  subject_id uuid not null references public.subjects (id) on delete cascade,
+  type public.resource_type,
+  module smallint check (module between 1 and 12),
+  message text check (char_length(message) <= 500),
+  status text not null default 'open' check (status in ('open', 'fulfilled', 'dismissed')),
+  ip_hash text,
+  created_at timestamptz not null default now()
+);
+
+create index note_requests_status_idx on public.note_requests (status, created_at desc);
+create index note_requests_ip_idx on public.note_requests (ip_hash, created_at);
+
+create table public.reports (
+  id uuid primary key default gen_random_uuid(),
+  resource_id uuid not null references public.resources (id) on delete cascade,
+  reason text not null check (
+    reason in ('broken', 'wrong_subject', 'wrong_info', 'low_quality', 'duplicate', 'copyright', 'other')
+  ),
+  message text check (char_length(message) <= 1000),
+  status text not null default 'open' check (status in ('open', 'resolved', 'dismissed')),
+  ip_hash text,
+  created_at timestamptz not null default now()
+);
+
+create index reports_status_idx on public.reports (status, created_at desc);
+create index reports_ip_idx on public.reports (ip_hash, created_at);
+
+create table public.search_logs (
+  id bigint generated always as identity primary key,
+  query text not null check (char_length(query) <= 120),
+  results int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index search_logs_created_idx on public.search_logs (created_at);
+
+create table public.site_settings (
+  id boolean primary key default true check (id),
+  college_name text not null default 'ASIET',
+  hero_image_url text,
+  hero_image_key text,
+  hero_note text not null default 'Same Concepts. Clearer Ideas.',
+  announcement text,
+  announcement_link text,
+  announcement_enabled boolean not null default false,
+  contributions_enabled boolean not null default true,
+  requests_enabled boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.site_settings (id) values (true) on conflict (id) do nothing;
+
+create trigger site_settings_set_updated_at
+  before update on public.site_settings
+  for each row execute function public.tg_set_updated_at();
+
+-- -----------------------------------------------------------------------------
+-- Views (security_invoker: callers' RLS applies)
+-- -----------------------------------------------------------------------------
+
+create view public.subject_overview
+with (security_invoker = true)
+as
+select
+  s.*,
+  coalesce(dep.slugs, '{}') as department_slugs,
+  coalesce(dep.ids, '{}') as department_ids,
+  coalesce(st.resource_count, 0) as resource_count,
+  coalesce(st.notes_count, 0) as notes_count,
+  coalesce(st.pyq_count, 0) as pyq_count,
+  coalesce(st.download_count, 0) as download_count,
+  st.last_published_at
+from public.subjects s
+left join lateral (
+  select
+    array_agg(d.slug order by d.sort_order, d.code) as slugs,
+    array_agg(d.id order by d.sort_order, d.code) as ids
+  from public.subject_departments sd
+  join public.departments d on d.id = sd.department_id
+  where sd.subject_id = s.id
+) dep on true
+left join lateral (
+  select
+    count(*)::int as resource_count,
+    (count(*) filter (where r.type = 'notes'))::int as notes_count,
+    (count(*) filter (where r.type = 'pyq'))::int as pyq_count,
+    coalesce(sum(r.download_count), 0)::int as download_count,
+    max(r.published_at) as last_published_at
+  from public.resources r
+  where r.subject_id = s.id and r.status = 'published'
+) st on true;
+
+create view public.resource_feed
+with (security_invoker = true)
+as
+select
+  r.id,
+  r.subject_id,
+  r.title,
+  r.description,
+  r.type,
+  r.module,
+  r.tags,
+  r.exam_year,
+  r.exam_session,
+  r.author,
+  r.is_verified,
+  r.is_featured,
+  r.status,
+  r.file_key,
+  r.file_url,
+  r.file_name,
+  r.file_size,
+  r.mime_type,
+  r.file_hash,
+  r.page_count,
+  r.thumbnail_key,
+  r.thumbnail_url,
+  r.external_url,
+  r.contributor_name,
+  r.view_count,
+  r.download_count,
+  r.created_by,
+  r.published_at,
+  r.created_at,
+  r.updated_at,
+  s.name as subject_name,
+  s.short_name as subject_short_name,
+  s.slug as subject_slug,
+  s.code as subject_code,
+  s.icon as subject_icon,
+  s.semester,
+  coalesce(
+    (
+      select array_agg(d.slug order by d.sort_order, d.code)
+      from public.subject_departments sd
+      join public.departments d on d.id = sd.department_id
+      where sd.subject_id = s.id
+    ),
+    '{}'
+  ) as department_slugs
+from public.resources r
+join public.subjects s on s.id = r.subject_id;
+
+-- -----------------------------------------------------------------------------
+-- Functions (RPC)
+-- -----------------------------------------------------------------------------
+
+-- Escapes LIKE wildcards in user input.
+create or replace function public.like_escape(q text)
+returns text
+language sql
+immutable
+parallel safe
+set search_path = ''
+as $$ select replace(replace(replace(coalesce(q, ''), '\', '\\'), '%', '\%'), '_', '\_') $$;
+
+create or replace function public.search_resources(
+  q text,
+  p_department text default null,
+  p_semester int default null,
+  p_type public.resource_type default null,
+  p_boost_department text default null,
+  p_boost_semester int default null,
+  p_limit int default 24
+)
+returns setof public.resource_feed
+language sql
+stable
+set search_path = public, extensions
+as $$
+  with params as (
+    select
+      trim(coalesce(q, '')) as q,
+      public.like_escape(trim(coalesce(q, ''))) as q_like,
+      upper(replace(trim(coalesce(q, '')), ' ', '')) as q_code,
+      websearch_to_tsquery('english', trim(coalesce(q, ''))) as tsq
+  ),
+  scored as (
+    select
+      r.id,
+      ts_rank_cd(r.fts, p.tsq) * 4
+        + greatest(word_similarity(p.q, r.title), similarity(p.q, r.title)) * 2
+        + greatest(word_similarity(p.q, s.name), word_similarity(p.q, coalesce(s.short_name, ''))) * 1.5
+        + case when s.code is not null and upper(replace(s.code, ' ', '')) = p.q_code then 3 else 0 end
+        + case when exists (select 1 from unnest(s.keywords) k where lower(k) = lower(p.q)) then 2 else 0 end
+        + least(r.download_count, 500) / 2000.0
+        as score
+    from public.resources r
+    join public.subjects s on s.id = r.subject_id
+    cross join params p
+    where r.status = 'published'
+      and p.q <> ''
+      and (
+        r.fts @@ p.tsq
+        or (char_length(p.q) >= 2 and r.title ilike '%' || p.q_like || '%')
+        or (char_length(p.q) >= 2 and s.name ilike '%' || p.q_like || '%')
+        or (char_length(p.q) >= 2 and coalesce(s.short_name, '') ilike '%' || p.q_like || '%')
+        or (char_length(p.q_code) >= 3 and upper(replace(coalesce(s.code, ''), ' ', '')) like p.q_code || '%')
+        or exists (
+          select 1 from unnest(s.keywords) k
+          where lower(k) = lower(p.q) or (char_length(p.q) >= 2 and lower(k) like lower(p.q_like) || '%')
+        )
+        or (char_length(p.q) >= 3 and word_similarity(p.q, r.title) > 0.4)
+        or (char_length(p.q) >= 3 and word_similarity(p.q, s.name) > 0.4)
+      )
+  )
+  select f.*
+  from scored sc
+  join public.resource_feed f on f.id = sc.id
+  where (p_department is null or p_department = any (f.department_slugs))
+    and (p_semester is null or f.semester = p_semester)
+    and (p_type is null or f.type = p_type)
+  order by
+    sc.score
+      + case when p_boost_department is not null and p_boost_department = any (f.department_slugs) then 0.6 else 0 end
+      + case when p_boost_semester is not null and f.semester = p_boost_semester then 0.6 else 0 end
+      desc,
+    f.published_at desc nulls last
+  limit greatest(1, least(coalesce(p_limit, 24), 100));
+$$;
+
+create or replace function public.search_subjects(
+  q text,
+  p_department text default null,
+  p_semester int default null,
+  p_boost_department text default null,
+  p_boost_semester int default null,
+  p_limit int default 8
+)
+returns setof public.subject_overview
+language sql
+stable
+set search_path = public, extensions
+as $$
+  with params as (
+    select
+      trim(coalesce(q, '')) as q,
+      public.like_escape(trim(coalesce(q, ''))) as q_like,
+      upper(replace(trim(coalesce(q, '')), ' ', '')) as q_code
+  )
+  select o.*
+  from public.subject_overview o
+  cross join params p
+  where o.is_active
+    and p.q <> ''
+    and (p_department is null or p_department = any (o.department_slugs))
+    and (p_semester is null or o.semester = p_semester)
+    and (
+      (char_length(p.q) >= 2 and o.name ilike '%' || p.q_like || '%')
+      or (char_length(p.q) >= 2 and coalesce(o.short_name, '') ilike '%' || p.q_like || '%')
+      or (char_length(p.q_code) >= 2 and upper(replace(coalesce(o.code, ''), ' ', '')) like p.q_code || '%')
+      or exists (
+        select 1 from unnest(o.keywords) k
+        where lower(k) = lower(p.q) or (char_length(p.q) >= 2 and lower(k) like lower(p.q_like) || '%')
+      )
+      or (char_length(p.q) >= 3 and word_similarity(p.q, o.name) > 0.4)
+    )
+  order by
+    (
+      case when upper(replace(coalesce(o.code, ''), ' ', '')) = p.q_code then 3 else 0 end
+      + case when exists (select 1 from unnest(o.keywords) k where lower(k) = lower(p.q)) then 2 else 0 end
+      + greatest(word_similarity(p.q, o.name), similarity(p.q, o.name)) * 2
+      + case when o.name ilike p.q_like || '%' then 1 else 0 end
+      + case when p_boost_department is not null and p_boost_department = any (o.department_slugs) then 0.8 else 0 end
+      + case when p_boost_semester is not null and o.semester = p_boost_semester then 0.8 else 0 end
+    ) desc,
+    o.resource_count desc,
+    o.name
+  limit greatest(1, least(coalesce(p_limit, 8), 50));
+$$;
+
+-- Most downloaded resources over the last N days.
+create or replace function public.trending_resources(
+  p_days int default 7,
+  p_department text default null,
+  p_semester int default null,
+  p_limit int default 8
+)
+returns setof public.resource_feed
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select f.*
+  from public.resource_feed f
+  join (
+    select e.resource_id, count(*) as hits
+    from public.resource_events e
+    where e.created_at > now() - make_interval(days => greatest(1, least(p_days, 90)))
+    group by e.resource_id
+  ) t on t.resource_id = f.id
+  join public.subjects s on s.id = f.subject_id and s.is_active
+  where f.status = 'published'
+    and (p_department is null or p_department = any (f.department_slugs))
+    and (p_semester is null or f.semester = p_semester)
+  order by t.hits desc, f.download_count desc
+  limit greatest(1, least(coalesce(p_limit, 8), 50));
+$$;
+
+-- Counts a view/download for a published resource.
+create or replace function public.track_resource_event(p_resource_id uuid, p_kind text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if p_kind not in ('view', 'download') then
+    raise exception 'invalid event kind';
+  end if;
+  if not exists (select 1 from public.resources where id = p_resource_id and status = 'published') then
+    return;
+  end if;
+
+  insert into public.resource_events (resource_id, kind) values (p_resource_id, p_kind);
+
+  if p_kind = 'view' then
+    update public.resources set view_count = view_count + 1 where id = p_resource_id;
+  else
+    update public.resources set download_count = download_count + 1 where id = p_resource_id;
+  end if;
+end
+$$;
+
+-- Daily activity for the admin dashboard (IST day boundaries by default).
+create or replace function public.admin_daily_stats(p_days int default 30, p_tz text default 'Asia/Kolkata')
+returns table (day date, downloads int, views int, uploads int)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  with days as (
+    select generate_series(
+      (now() at time zone p_tz)::date - (greatest(1, least(p_days, 365)) - 1),
+      (now() at time zone p_tz)::date,
+      interval '1 day'
+    )::date as day
+  ),
+  ev as (
+    select (e.created_at at time zone p_tz)::date as day, e.kind, count(*) as n
+    from public.resource_events e
+    where e.created_at > now() - make_interval(days => greatest(1, least(p_days, 365)) + 1)
+    group by 1, 2
+  ),
+  up as (
+    select (r.created_at at time zone p_tz)::date as day, count(*) as n
+    from public.resources r
+    where r.created_at > now() - make_interval(days => greatest(1, least(p_days, 365)) + 1)
+    group by 1
+  )
+  select
+    d.day,
+    coalesce((select ev.n from ev where ev.day = d.day and ev.kind = 'download'), 0)::int,
+    coalesce((select ev.n from ev where ev.day = d.day and ev.kind = 'view'), 0)::int,
+    coalesce((select up.n from up where up.day = d.day), 0)::int
+  from days d
+  where public.is_admin()
+  order by d.day;
+$$;
+
+-- Most downloaded resources in a window, for the admin dashboard.
+create or replace function public.admin_top_resources(p_days int default 30, p_limit int default 6)
+returns table (id uuid, title text, subject_name text, downloads int, views int)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select r.id, r.title, s.name, t.downloads::int, t.views::int
+  from (
+    select
+      e.resource_id,
+      count(*) filter (where e.kind = 'download') as downloads,
+      count(*) filter (where e.kind = 'view') as views
+    from public.resource_events e
+    where e.created_at > now() - make_interval(days => greatest(1, least(p_days, 365)))
+    group by e.resource_id
+  ) t
+  join public.resources r on r.id = t.resource_id
+  join public.subjects s on s.id = r.subject_id
+  where public.is_admin()
+  order by t.downloads desc, t.views desc
+  limit greatest(1, least(p_limit, 50));
+$$;
+
+-- Popular and unanswered searches, for the admin dashboard.
+create or replace function public.admin_search_insights(p_days int default 30, p_limit int default 8)
+returns table (query text, searches int, zero_results boolean)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select lower(l.query), count(*)::int, bool_and(l.results = 0)
+  from public.search_logs l
+  where l.created_at > now() - make_interval(days => greatest(1, least(p_days, 365)))
+    and public.is_admin()
+  group by lower(l.query)
+  order by count(*) desc
+  limit greatest(1, least(p_limit, 50));
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Row level security
+-- -----------------------------------------------------------------------------
+
+alter table public.admins enable row level security;
+alter table public.departments enable row level security;
+alter table public.subjects enable row level security;
+alter table public.subject_departments enable row level security;
+alter table public.resources enable row level security;
+alter table public.submission_details enable row level security;
+alter table public.resource_events enable row level security;
+alter table public.note_requests enable row level security;
+alter table public.reports enable row level security;
+alter table public.search_logs enable row level security;
+alter table public.site_settings enable row level security;
+
+-- admins: admins can see the team; changes go through the service role
+create policy "admins read team" on public.admins
+  for select to authenticated using ((select public.is_admin()));
+
+-- departments
+create policy "public reads active departments" on public.departments
+  for select using (is_active or (select public.is_admin()));
+create policy "admins insert departments" on public.departments
+  for insert to authenticated with check ((select public.is_admin()));
+create policy "admins update departments" on public.departments
+  for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
+create policy "admins delete departments" on public.departments
+  for delete to authenticated using ((select public.is_admin()));
+
+-- subjects
+create policy "public reads active subjects" on public.subjects
+  for select using (is_active or (select public.is_admin()));
+create policy "admins insert subjects" on public.subjects
+  for insert to authenticated with check ((select public.is_admin()));
+create policy "admins update subjects" on public.subjects
+  for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
+create policy "admins delete subjects" on public.subjects
+  for delete to authenticated using ((select public.is_admin()));
+
+-- subject_departments
+create policy "public reads subject departments" on public.subject_departments
+  for select using (true);
+create policy "admins insert subject departments" on public.subject_departments
+  for insert to authenticated with check ((select public.is_admin()));
+create policy "admins delete subject departments" on public.subject_departments
+  for delete to authenticated using ((select public.is_admin()));
+
+-- resources
+create policy "public reads published resources" on public.resources
+  for select using (status = 'published' or (select public.is_admin()));
+create policy "admins insert resources" on public.resources
+  for insert to authenticated with check ((select public.is_admin()));
+create policy "admins update resources" on public.resources
+  for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
+create policy "admins delete resources" on public.resources
+  for delete to authenticated using ((select public.is_admin()));
+
+-- admin-only tables (public inserts happen server-side with the service role)
+create policy "admins read submission details" on public.submission_details
+  for select to authenticated using ((select public.is_admin()));
+create policy "admins delete submission details" on public.submission_details
+  for delete to authenticated using ((select public.is_admin()));
+
+create policy "admins read events" on public.resource_events
+  for select to authenticated using ((select public.is_admin()));
+
+create policy "admins read requests" on public.note_requests
+  for select to authenticated using ((select public.is_admin()));
+create policy "admins update requests" on public.note_requests
+  for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
+create policy "admins delete requests" on public.note_requests
+  for delete to authenticated using ((select public.is_admin()));
+
+create policy "admins read reports" on public.reports
+  for select to authenticated using ((select public.is_admin()));
+create policy "admins update reports" on public.reports
+  for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
+create policy "admins delete reports" on public.reports
+  for delete to authenticated using ((select public.is_admin()));
+
+create policy "admins read search logs" on public.search_logs
+  for select to authenticated using ((select public.is_admin()));
+
+-- site settings
+create policy "public reads site settings" on public.site_settings
+  for select using (true);
+create policy "admins update site settings" on public.site_settings
+  for update to authenticated using ((select public.is_admin())) with check ((select public.is_admin()));
+
+-- -----------------------------------------------------------------------------
+-- Grants (explicit, in case the project doesn't auto-expose new tables)
+-- -----------------------------------------------------------------------------
+
+grant usage on schema public to anon, authenticated, service_role;
+
+grant select on
+  public.departments, public.subjects, public.subject_departments, public.resources,
+  public.site_settings, public.subject_overview, public.resource_feed
+to anon, authenticated;
+
+grant insert, update, delete on
+  public.departments, public.subjects, public.subject_departments, public.resources, public.site_settings
+to authenticated;
+
+grant select, update, delete on
+  public.admins, public.submission_details, public.resource_events, public.note_requests,
+  public.reports, public.search_logs
+to authenticated;
+
+grant all on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;
+
+grant execute on function
+  public.is_admin(),
+  public.search_resources(text, text, int, public.resource_type, text, int, int),
+  public.search_subjects(text, text, int, text, int, int),
+  public.trending_resources(int, text, int, int),
+  public.track_resource_event(uuid, text),
+  public.admin_daily_stats(int, text),
+  public.admin_top_resources(int, int),
+  public.admin_search_insights(int, int)
+to anon, authenticated, service_role;
