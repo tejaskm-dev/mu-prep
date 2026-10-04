@@ -138,19 +138,28 @@ export function parseTimetableText(text: string, departments: DeptOption[]): Tim
       .replace(/^(?:Subject\s+Name\s*\d*|Remedy|Tutorial|Theory|Lab\s*\d*|Course\s*\d*|Sl\.?\s*No\.?\s*\d*)\s*[:-]?\s*/i, "")
       .trim();
 
-    // Look for KTU / university course code patterns:
-    // e.g. GAMAT301, PCCST302, PBCST304, GAEST305, UCHUT347, CST201, MAT101, PCCSL307, etc.
-    const codeMatch = cleaned.match(/\b([A-Za-z]{2,7}\s?\d{3}[A-Za-z]?)\b/);
+    // Look for university course code patterns:
+    // KTU: GAMAT301, PCCST302, CST201, MAT101
+    // VTU: 21CS32, 18CS51, BCS301
+    // Anna Univ: CS8391, MA8351
+    // Generic / Autonomous: CS201, MATH101, IT401, etc.
+    const codeMatch = cleaned.match(
+      /\b(?:[A-Za-z]{2,7}\s?\d{3}[A-Za-z]?|\d{2}[A-Za-z]{2,5}\s?\d{2,3}[A-Za-z]?|[A-Za-z]{2,5}\s?\d{4}[A-Za-z]?|[A-Za-z]{2,4}\s?\d{2,3}[A-Za-z]?)\b/,
+    );
     let code: string | null = null;
     let name = cleaned;
 
     if (codeMatch) {
-      code = codeMatch[1].replace(/\s+/g, "").toUpperCase();
+      code = codeMatch[0].replace(/\s+/g, "").toUpperCase();
       const codeIdx = codeMatch.index ?? 0;
       name = (cleaned.slice(0, codeIdx) + " " + cleaned.slice(codeIdx + codeMatch[0].length)).trim();
     } else if (/code\s+tandra/i.test(cleaned)) {
       code = "OOP PRJT";
       name = "Code Tandra (OOP Project)";
+    } else if (/^(?:Subject|Course|Paper|Theory|Lab)\s*(?:Name)?\s*[:\d\-]/i.test(rawLine)) {
+      // Row is explicitly a subject entry even if it doesn't have an alphanumeric course code
+      code = null;
+      name = cleaned;
     } else {
       continue;
     }
