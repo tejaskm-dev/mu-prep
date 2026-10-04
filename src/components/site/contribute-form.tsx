@@ -15,6 +15,7 @@ import { RESOURCE_TAGS, RESOURCE_TYPES, SEMESTERS } from "@/lib/constants";
 import type { ResourceType } from "@/lib/database.types";
 import { formatBytes } from "@/lib/format";
 import { analyzePdf, blobToDataUrl, imagesToPdf, imageThumbnail, sha256 } from "@/lib/pdf";
+import { compressForUpload } from "@/lib/compress";
 import { matchSubject, mergeDetected, parseDocumentText, parseFilename, type SubjectLite } from "@/lib/smart-detect";
 import { uploadFiles } from "@/lib/uploadthing";
 import { cn } from "@/lib/utils";
@@ -150,15 +151,26 @@ export function ContributeForm({ subjects, departments }: { subjects: SubjectLit
     if (!consent) return toast.error("Please confirm you're allowed to share these files");
 
     try {
-      setStage("uploading");
+      setStage("preparing");
       setProgress(0);
-      const hashes = await Promise.all(files.map((f) => sha256(f.file).catch(() => undefined)));
+      const processed = await Promise.all(
+        files.map(async (f) => {
+          try {
+            const res = await compressForUpload(f.file);
+            return { ...f, file: res.file };
+          } catch {
+            return f;
+          }
+        }),
+      );
+      setStage("uploading");
+      const hashes = await Promise.all(processed.map((f) => sha256(f.file).catch(() => undefined)));
       const uploaded = await uploadFiles("contribution", {
-        files: files.map((f) => f.file),
+        files: processed.map((f) => f.file),
         onUploadProgress: ({ totalProgress }) => setProgress(totalProgress),
       });
       setStage("saving");
-      const thumbs = await Promise.all(files.map((f) => (f.thumbnail ? blobToDataUrl(f.thumbnail) : Promise.resolve(null))));
+      const thumbs = await Promise.all(processed.map((f) => (f.thumbnail ? blobToDataUrl(f.thumbnail) : Promise.resolve(null))));
       const result = await submitContribution({
         subjectId,
         type,
@@ -177,9 +189,9 @@ export function ContributeForm({ subjects, departments }: { subjects: SubjectLit
           url: u.ufsUrl,
           name: u.name,
           size: u.size,
-          type: u.type || files[i].file.type,
+          type: u.type || processed[i].file.type,
           hash: hashes[i],
-          pageCount: files[i].pageCount,
+          pageCount: processed[i].pageCount,
           thumbnail: thumbs[i],
         })),
       });
@@ -407,7 +419,7 @@ export function ContributeForm({ subjects, departments }: { subjects: SubjectLit
           </label>
           <Button type="submit" disabled={busy} className="mt-5 h-11 w-full rounded-lg text-[15px]">
             {busy ? <MuSpinner /> : <UploadCloud />}
-            {stage === "preparing" ? "Preparing…" : stage === "uploading" ? `Uploading ${Math.round(progress)}%` : stage === "saving" ? "Submitting…" : "Submit for review"}
+            {stage === "preparing" ? "Optimising files…" : stage === "uploading" ? `Uploading ${Math.round(progress)}%` : stage === "saving" ? "Submitting…" : "Submit for review"}
           </Button>
           {stage === "uploading" ? (
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">

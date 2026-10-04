@@ -20,11 +20,11 @@ export type CompressOptions = {
 };
 
 export const DEFAULT_COMPRESS_OPTIONS: CompressOptions = {
-  maxImageSide: 2400,
-  photoQuality: 0.85,
-  pdfDpi: 200,
-  pdfJpegQuality: 0.85,
-  minSavings: 0.1,
+  maxImageSide: 1800,
+  photoQuality: 0.76,
+  pdfDpi: 144,
+  pdfJpegQuality: 0.72,
+  minSavings: 0.06,
 };
 
 export type CompressInput = { buffer: ArrayBuffer; name: string; type: string; options?: Partial<CompressOptions> };
@@ -91,7 +91,8 @@ function result(input: CompressInput, partial: Partial<CompressOutput> & Pick<Co
 // ───────────────────────────────────────────── images
 
 async function compressImage(input: CompressInput, o: CompressOptions): Promise<CompressOutput> {
-  const type = input.type.toLowerCase();
+  const ext = input.name.toLowerCase().split(".").pop() ?? "";
+  const type = (input.type || "").toLowerCase() || (ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg");
   if (type === "image/gif" || type === "image/svg+xml") return result(input, { method: "none", detail: "Format kept as-is" });
   let bitmap: ImageBitmap;
   try {
@@ -104,8 +105,8 @@ async function compressImage(input: CompressInput, o: CompressOptions): Promise<
   const canvas = await drawScaled(bitmap, width, height, false);
   bitmap.close();
 
-  // Lossless WebP for unscaled screenshots/diagrams, high-quality lossy otherwise.
-  const quality = isPng && !scaled ? 1 : isPng ? 0.92 : o.photoQuality;
+  // Lossless WebP for unscaled screenshots/diagrams, high-efficiency lossy otherwise.
+  const quality = isPng && !scaled ? 0.90 : isPng ? 0.80 : o.photoQuality;
   let blob = await canvasBlob(canvas, "image/webp", quality);
   if (!blob || blob.type !== "image/webp") {
     if (isPng) return result(input, { method: "none", detail: "WebP encoding unavailable" }); // keep transparency
@@ -199,7 +200,7 @@ async function compressPdf(input: CompressInput, o: CompressOptions): Promise<Co
     if (!(obj instanceof PDFRawStream)) continue;
     const dict = obj.dict;
     if (dict.lookup(N("Subtype")) !== N("Image")) continue;
-    if (obj.contents.byteLength < 48_000) continue; // not worth it
+    if (obj.contents.byteLength < 24_000) continue; // skip tiny icons/bullets
     if (dict.lookup(N("ImageMask")) instanceof PDFBool) continue;
     if (dict.has(N("SMask")) || dict.has(N("Mask")) || dict.has(N("Decode"))) continue;
 
@@ -300,7 +301,7 @@ async function compressOffice(input: CompressInput, o: CompressOptions): Promise
   }
   let optimised = 0;
   for (const [path, data] of Object.entries(entries)) {
-    if (!/^(word|ppt|xl)\/media\//.test(path) || data.byteLength < 120_000) continue;
+    if (!/^(word|ppt|xl)\/media\//.test(path) || data.byteLength < 40_000) continue;
     const isJpeg = /\.jpe?g$/i.test(path);
     const isPng = /\.png$/i.test(path);
     if (!isJpeg && !isPng) continue;
@@ -337,11 +338,16 @@ async function compressOffice(input: CompressInput, o: CompressOptions): Promise
 
 export async function compressBuffer(input: CompressInput): Promise<CompressOutput> {
   const o = { ...DEFAULT_COMPRESS_OPTIONS, ...input.options };
-  const type = input.type.toLowerCase();
+  const type = (input.type || "").toLowerCase();
   const ext = input.name.toLowerCase().split(".").pop() ?? "";
   try {
     if (type === "application/pdf" || ext === "pdf") return await compressPdf(input, o);
-    if (type.startsWith("image/")) return await compressImage(input, o);
+    if (type.startsWith("image/") || ["png", "jpg", "jpeg", "webp"].includes(ext)) {
+      const resolvedInput = !type || type === "application/octet-stream"
+        ? { ...input, type: ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg" }
+        : input;
+      return await compressImage(resolvedInput, o);
+    }
     if (["docx", "pptx", "xlsx"].includes(ext) || /officedocument/.test(type)) return await compressOffice(input, o);
   } catch (error) {
     return result(input, { method: "none", detail: error instanceof Error ? error.message : "Compression failed" });

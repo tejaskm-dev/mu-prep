@@ -110,7 +110,19 @@ export function UploadRow({
             <span className="min-w-0 truncate" title={item.name}>
               {item.kind === "link" ? item.externalUrl : item.name}
             </span>
-            {item.size ? <span className="shrink-0">· {formatBytes(item.size)}</span> : null}
+            {item.size ? (
+              <span className="flex shrink-0 items-center gap-1.5">
+                · {formatBytes(item.size)}
+                {item.compression?.changed ? (
+                  <span
+                    className="inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20"
+                    title={`${item.compression.detail} (${formatBytes(item.compression.originalSize)} → ${formatBytes(item.compression.compressedSize)})`}
+                  >
+                    -{Math.round((1 - item.compression.compressedSize / item.compression.originalSize) * 100)}%
+                  </span>
+                ) : null}
+              </span>
+            ) : null}
             <span className="ml-auto shrink-0">
               <StatusChip item={item} onRetry={onRetry} />
             </span>
@@ -257,7 +269,11 @@ export function UploadRow({
           </button>
         </div>
       </div>
-      {item.status === "uploading" ? (
+      {item.status === "compressing" ? (
+        <div className="h-1 overflow-hidden rounded-b-xl bg-muted">
+          <div className="h-full w-2/5 animate-pulse rounded-full bg-brand/70" />
+        </div>
+      ) : item.status === "uploading" ? (
         <div className="h-1 overflow-hidden rounded-b-xl bg-muted">
           <div className="h-full bg-brand transition-[width] duration-300" style={{ width: `${item.progress}%` }} />
         </div>
@@ -271,6 +287,12 @@ function StatusChip({ item, onRetry }: { item: UploadItem; onRetry: () => void }
   switch (item.status) {
     case "queued":
       return <span>Waiting…</span>;
+    case "compressing":
+      return (
+        <span className="inline-flex items-center gap-1.5 font-medium text-brand">
+          <MuSpinner className="size-3" /> Optimising…
+        </span>
+      );
     case "uploading":
       return <span className="font-medium text-ink tabular-nums">Uploading {Math.round(item.progress)}%</span>;
     case "uploaded":

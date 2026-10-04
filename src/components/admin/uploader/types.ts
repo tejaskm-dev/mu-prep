@@ -1,6 +1,6 @@
 import type { ResourceType } from "@/lib/database.types";
 
-export type ItemStatus = "queued" | "uploading" | "uploaded" | "error" | "published";
+export type ItemStatus = "queued" | "compressing" | "uploading" | "uploaded" | "error" | "published";
 
 export type ItemMeta = {
   title: string;
@@ -38,6 +38,12 @@ export type UploadItem = {
   selected: boolean;
   expanded: boolean;
   resourceId?: string;
+  compression?: {
+    changed: boolean;
+    originalSize: number;
+    compressedSize: number;
+    detail: string;
+  };
 };
 
 export type BatchDefaults = {
@@ -49,6 +55,7 @@ export type BatchDefaults = {
   author: string;
   isVerified: boolean;
   publish: boolean;
+  compress: boolean;
 };
 
 export const EMPTY_DEFAULTS: BatchDefaults = {
@@ -60,4 +67,5 @@ export const EMPTY_DEFAULTS: BatchDefaults = {
   author: "",
   isVerified: false,
   publish: true,
+  compress: true,
 };

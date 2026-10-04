@@ -30,6 +30,10 @@ function getWorker() {
       workerBroken = true;
       worker?.terminate();
       worker = null;
+      for (const cb of pending.values()) {
+        cb({ buffer: null, name: "", type: "", originalSize: 0, compressedSize: 0, method: "none", detail: "Worker error" });
+      }
+      pending.clear();
     };
     return worker;
   } catch {
@@ -60,18 +64,32 @@ async function run(input: CompressInput): Promise<CompressOutput> {
   return compressBuffer(input);
 }
 
-async function samePageCount(original: File, compressed: ArrayBuffer) {
+async function samePageCount(original: File, compressed: ArrayBuffer): Promise<boolean> {
   try {
-    const lib = await loadPdfjs();
-    const taskA = lib.getDocument({ data: new Uint8Array(await original.arrayBuffer()) });
-    const taskB = lib.getDocument({ data: new Uint8Array(compressed.slice(0)) });
-    try {
-      const [a, b] = await Promise.all([taskA.promise, taskB.promise]);
-      return a.numPages === b.numPages && (await b.getPage(b.numPages).then(() => true));
-    } finally {
-      void taskA.destroy();
-      void taskB.destroy();
+    const lib = await loadPdfjs().catch(() => null);
+    if (lib) {
+      const taskA = lib.getDocument({ data: new Uint8Array(await original.arrayBuffer()) });
+      const taskB = lib.getDocument({ data: new Uint8Array(compressed.slice(0)) });
+      try {
+        const [a, b] = await Promise.all([taskA.promise, taskB.promise]);
+        const valid = a.numPages === b.numPages && (await b.getPage(b.numPages).then(() => true).catch(() => false));
+        return valid;
+      } finally {
+        void taskA.destroy().catch(() => {});
+        void taskB.destroy().catch(() => {});
+      }
     }
+  } catch {
+    // try pdf-lib fallback below
+  }
+
+  try {
+    const { PDFDocument } = await import("pdf-lib");
+    const [docA, docB] = await Promise.all([
+      PDFDocument.load(await original.arrayBuffer(), { ignoreEncryption: true }),
+      PDFDocument.load(compressed, { ignoreEncryption: true }),
+    ]);
+    return docA.getPageCount() === docB.getPageCount();
   } catch {
     return false;
   }
@@ -84,7 +102,7 @@ async function samePageCount(original: File, compressed: ArrayBuffer) {
 export function compressForUpload(file: File, options?: Partial<CompressOptions>): Promise<CompressResult> {
   const job = chain.then(async (): Promise<CompressResult> => {
     const unchanged = (detail: string): CompressResult => ({ file, changed: false, originalSize: file.size, compressedSize: file.size, detail });
-    if (file.size < 150_000) return unchanged("Small file kept as-is");
+    if (file.size < 60_000) return unchanged("Small file kept as-is");
     try {
       const output = await run({ buffer: await file.arrayBuffer(), name: file.name, type: file.type, options });
       if (!output.buffer) return unchanged(output.detail);

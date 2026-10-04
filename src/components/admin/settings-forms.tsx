@@ -15,6 +15,7 @@ import { addAdmin, removeAdmin, updateSiteSettings } from "@/lib/actions/admin/s
 import type { AdminRow, SiteSettings } from "@/lib/database.types";
 import { formatDate } from "@/lib/format";
 import { imageThumbnail } from "@/lib/pdf";
+import { compressForUpload } from "@/lib/compress";
 import { uploadFiles } from "@/lib/uploadthing";
 import { MuSpinner } from "@/components/brand/mu-loader";
 
@@ -48,11 +49,13 @@ export function SiteSettingsForm({ settings }: { settings: SiteSettings }) {
   async function uploadHero(file: File) {
     setUploading(true);
     try {
-      // Keep it crisp but light: downscale very large photos to 2000px wide.
-      const resized = file.size > 1_500_000 ? ((await imageThumbnail(file, 2000)) ?? file) : file;
-      const named = new File([resized], `hero-${Date.now()}.${resized.type === "image/webp" ? "webp" : "jpg"}`, { type: resized.type || file.type });
-      const [res] = await uploadFiles("siteImage", { files: [named] });
-      setHero({ key: res.key, url: res.ufsUrl });
+      const res = await compressForUpload(file, { maxImageSide: 2000, photoQuality: 0.85 }).catch(() => null);
+      const ready = res?.file ?? file;
+      const named = new File([ready], `hero-${Date.now()}.${ready.type === "image/webp" ? "webp" : "jpg"}`, {
+        type: ready.type || file.type,
+      });
+      const [uploadRes] = await uploadFiles("siteImage", { files: [named] });
+      setHero({ key: uploadRes.key, url: uploadRes.ufsUrl });
       toast.success("Image uploaded — save to apply it");
     } catch (e) {
       toast.error(e instanceof Error && /503/.test(e.message) ? "Uploads aren't configured (UPLOADTHING_TOKEN)" : "Upload failed");

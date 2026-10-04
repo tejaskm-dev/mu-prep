@@ -26,6 +26,7 @@ import { ACCEPTED_FILE_TYPES, RESOURCE_TAGS, RESOURCE_TYPES } from "@/lib/consta
 import type { ResourceFeedRow, ResourceType } from "@/lib/database.types";
 import { fileKind, formatBytes } from "@/lib/format";
 import { analyzePdf, imageThumbnail, sha256 } from "@/lib/pdf";
+import { compressForUpload } from "@/lib/compress";
 import { uploadFiles } from "@/lib/uploadthing";
 import { cn } from "@/lib/utils";
 import { SubjectCombobox, type SubjectOption } from "./subject-combobox";
@@ -86,22 +87,25 @@ export function ResourceEditor({ resource, subjects }: { resource: ResourceFeedR
     });
 
   async function replaceFile(file: File) {
-    setWorking("Uploading new file…");
+    setWorking("Optimising file…");
     try {
+      const compressResult = await compressForUpload(file).catch(() => null);
+      const fileToUpload = compressResult?.file ?? file;
+      setWorking("Uploading new file…");
       const [hash, info] = await Promise.all([
-        sha256(file).catch(() => null),
-        file.type === "application/pdf" ? analyzePdf(file).catch(() => null) : Promise.resolve(null),
+        sha256(fileToUpload).catch(() => null),
+        fileToUpload.type === "application/pdf" ? analyzePdf(fileToUpload).catch(() => null) : Promise.resolve(null),
       ]);
-      const [uploaded] = await uploadFiles("resourceFile", { files: [file] });
-      const thumbBlob = info?.thumbnail ?? (file.type.startsWith("image/") ? await imageThumbnail(file) : null);
+      const [uploaded] = await uploadFiles("resourceFile", { files: [fileToUpload] });
+      const thumbBlob = info?.thumbnail ?? (fileToUpload.type.startsWith("image/") ? await imageThumbnail(fileToUpload) : null);
       const thumb = thumbBlob ? await uploadThumbBlob(thumbBlob, `thumb-${resource.id}`).catch(() => null) : null;
       const result = await updateResource(resource.id, {
         file: {
           key: uploaded.key,
           url: uploaded.ufsUrl,
-          name: file.name,
-          size: file.size,
-          mime: file.type || "application/octet-stream",
+          name: fileToUpload.name,
+          size: fileToUpload.size,
+          mime: fileToUpload.type || "application/octet-stream",
           hash,
           pageCount: info?.pageCount ?? null,
           thumbnailKey: thumb?.key ?? null,
@@ -109,7 +113,11 @@ export function ResourceEditor({ resource, subjects }: { resource: ResourceFeedR
         },
       });
       if (!result.ok) throw new Error(result.error);
-      toast.success("File replaced — the old one was removed from storage");
+      if (compressResult?.changed) {
+        toast.success(`File replaced and compressed (${formatBytes(compressResult.originalSize)} → ${formatBytes(compressResult.compressedSize)})`);
+      } else {
+        toast.success("File replaced — the old one was removed from storage");
+      }
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't replace the file");

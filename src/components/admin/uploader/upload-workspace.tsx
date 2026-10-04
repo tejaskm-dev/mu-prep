@@ -14,6 +14,8 @@ import { deleteOrphans } from "@/lib/actions/admin/site";
 import { ACCEPTED_FILE_TYPES, RESOURCE_TAGS, RESOURCE_TYPES, SEMESTERS } from "@/lib/constants";
 import type { ResourceType } from "@/lib/database.types";
 import { analyzePdf, imageThumbnail, imagesToPdf, sha256 } from "@/lib/pdf";
+import { compressForUpload } from "@/lib/compress";
+import { formatBytes } from "@/lib/format";
 import { matchSubject, mergeDetected, parseDocumentText, parseFilename, refineTitle, type Detected } from "@/lib/smart-detect";
 import { uploadFiles } from "@/lib/uploadthing";
 import { cn } from "@/lib/utils";
@@ -282,11 +284,61 @@ export function UploadWorkspace({
     started.current.add(id);
     const controller = new AbortController();
     controllers.current.set(id, controller);
-    dispatch({ type: "patch", id, patch: { status: "uploading", progress: 0, error: undefined } });
-    let last = 0;
+
     try {
+      let fileToUpload = file;
+      const shouldCompress = defaultsRef.current.compress;
+
+      if (shouldCompress) {
+        dispatch({ type: "patch", id, patch: { status: "compressing", progress: 0, error: undefined } });
+        try {
+          const result = await compressForUpload(file);
+          if (controller.signal.aborted) return;
+          if (result.changed) {
+            fileToUpload = result.file;
+            files.current.set(id, fileToUpload);
+            const newHash = await sha256(fileToUpload).catch(() => undefined);
+            dispatch({
+              type: "patch",
+              id,
+              patch: {
+                name: fileToUpload.name,
+                size: fileToUpload.size,
+                mime: fileToUpload.type,
+                compression: {
+                  changed: true,
+                  originalSize: result.originalSize,
+                  compressedSize: result.compressedSize,
+                  detail: result.detail,
+                },
+                ...(newHash ? { hash: newHash } : {}),
+              },
+            });
+          } else {
+            dispatch({
+              type: "patch",
+              id,
+              patch: {
+                compression: {
+                  changed: false,
+                  originalSize: result.originalSize,
+                  compressedSize: result.compressedSize,
+                  detail: result.detail,
+                },
+              },
+            });
+          }
+        } catch {
+          // If compression fails, continue with original file
+        }
+      }
+
+      if (controller.signal.aborted) return;
+
+      dispatch({ type: "patch", id, patch: { status: "uploading", progress: 0, error: undefined } });
+      let last = 0;
       const [res] = await uploadFiles("resourceFile", {
-        files: [file],
+        files: [fileToUpload],
         signal: controller.signal,
         onUploadProgress: ({ progress }) => {
           if (progress - last >= 2 || progress >= 100) {
@@ -305,7 +357,7 @@ export function UploadWorkspace({
   }, []);
 
   useEffect(() => {
-    const active = items.filter((i) => i.status === "uploading").length;
+    const active = items.filter((i) => i.status === "uploading" || i.status === "compressing").length;
     const queued = items.filter((i) => i.status === "queued" && !started.current.has(i.id));
     for (const item of queued.slice(0, Math.max(0, UPLOAD_CONCURRENCY - active))) void startUpload(item.id);
   }, [items, startUpload]);
@@ -418,7 +470,7 @@ export function UploadWorkspace({
   const pending = items.filter((i) => i.status !== "published");
   const ready = pending.filter((i) => (i.kind === "file" && i.status === "uploaded") || i.kind === "link");
   const invalid = ready.filter((i) => !i.meta.subjectId || !i.meta.title.trim());
-  const uploading = pending.filter((i) => i.status === "uploading" || i.status === "queued").length;
+  const uploading = pending.filter((i) => i.status === "uploading" || i.status === "compressing" || i.status === "queued").length;
   const failed = pending.filter((i) => i.status === "error").length;
   const selectedIds = pending.filter((i) => i.selected).map((i) => i.id);
   const publishedCount = items.length - pending.length;
@@ -489,6 +541,15 @@ export function UploadWorkspace({
     }
     toast.success(`Applied to ${ids.length} files`);
   };
+
+  const totalSavedBytes = useMemo(() => {
+    return items.reduce((acc, i) => {
+      if (i.compression?.changed && i.compression.originalSize > i.compression.compressedSize) {
+        return acc + (i.compression.originalSize - i.compression.compressedSize);
+      }
+      return acc;
+    }, 0);
+  }, [items]);
 
   const stats = useMemo(
     () => [
@@ -638,6 +699,15 @@ export function UploadWorkspace({
           })}
           <button type="button" data-active={defaults.isVerified} onClick={() => setDefaults((d) => ({ ...d, isVerified: !d.isVerified }))} className="chip h-7 px-3 text-[12px]">
             <BadgeCheck className="size-3.5" /> Verified
+          </button>
+          <button
+            type="button"
+            data-active={defaults.compress}
+            onClick={() => setDefaults((d) => ({ ...d, compress: !d.compress }))}
+            className="chip h-7 px-3 text-[12px]"
+            title="Shrink PDFs and images before uploading to save storage & bandwidth"
+          >
+            <Sparkles className="size-3.5" /> Compress
           </button>
           <div className="ml-auto flex items-center rounded-lg border border-border p-0.5 text-[12.5px]" role="radiogroup" aria-label="Visibility">
             {[
@@ -797,6 +867,11 @@ export function UploadWorkspace({
                 <strong className="font-semibold text-white tabular-nums">{s.value}</strong> {s.label}
               </span>
             ))}
+            {totalSavedBytes > 0 ? (
+              <span className="rounded-md bg-emerald-950/80 px-2 py-0.5 text-[12px] font-medium text-emerald-300 ring-1 ring-emerald-500/30">
+                Saved {formatBytes(totalSavedBytes)}
+              </span>
+            ) : null}
             {publishedCount ? (
               <button type="button" onClick={() => dispatch({ type: "clearPublished" })} className="text-white/70 underline-offset-2 hover:text-white hover:underline">
                 Clear {publishedCount} published
