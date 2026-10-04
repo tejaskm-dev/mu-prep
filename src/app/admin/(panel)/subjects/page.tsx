@@ -14,7 +14,7 @@ export default async function SubjectsPage() {
     supabase.from("subject_overview").select("*").order("semester").order("sort_order").order("name"),
     getDepartmentOptions(supabase),
   ]);
-  const deptOptions = departments.map((d) => ({ id: d.id, slug: d.slug, code: d.code }));
+  const deptOptions = departments.map((d) => ({ id: d.id, slug: d.slug, code: d.code, name: d.name }));
   return (
     <>
       <PageHeader
