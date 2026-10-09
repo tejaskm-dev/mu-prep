@@ -118,7 +118,7 @@ async function ResourceContent({ params }: { params: PageProps<"/notes/[id]">["p
           ) : null}
         </div>
 
-        <aside className="flex flex-col gap-5 lg:sticky lg:top-6">
+        <aside className="flex flex-col gap-5 lg:sticky lg:top-20">
           <section className="rounded-2xl border border-border bg-white p-5 shadow-card">
             <a
               href={`/api/download/${r.id}`}

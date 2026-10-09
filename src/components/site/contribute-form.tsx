@@ -398,7 +398,7 @@ export function ContributeForm({ subjects, departments }: { subjects: SubjectLit
       </div>
 
       {/* Sidebar */}
-      <aside className="space-y-6 lg:sticky lg:top-6">
+      <aside className="space-y-6 lg:sticky lg:top-20">
         <section className="rounded-2xl border border-border bg-white p-5 shadow-card">
           <h2 className="text-[16px] font-semibold text-ink">3. About you</h2>
           <p className="mt-0.5 text-[13px] text-muted-foreground">Optional — we&apos;ll credit you on the file.</p>
