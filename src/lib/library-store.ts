@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-// Saved items, recently viewed items and recent searches live in localStorage —
+// Saved items, recently viewed items, recent searches and revised topics live in localStorage —
 // there are no accounts on µPrep. Every access is guarded: storage can be
 // unavailable (private mode, blocked site data).
 
@@ -12,6 +12,7 @@ const KEYS = {
   saved: "muprep:saved",
   recent: "muprep:recent",
   searches: "muprep:searches",
+  revised: "muprep:revised",
 } as const;
 
 type Key = keyof typeof KEYS;
@@ -86,6 +87,11 @@ export function useRecentSearches() {
   return useList<string>("searches");
 }
 
+/** Important-topic ids the student has marked as revised. */
+export function useRevised() {
+  return useList<string>("revised");
+}
+
 export function toggleSaved(id: string) {
   const list = read<LibraryEntry>("saved");
   const exists = list.some((e) => e.id === id);
@@ -114,4 +120,9 @@ export function pushRecentSearch(q: string) {
 
 export function clearRecentSearches() {
   write("searches", []);
+}
+
+export function setRevised(ids: string[], on: boolean) {
+  const current = read<string>("revised").filter((id) => !ids.includes(id));
+  write("revised", on ? [...ids, ...current].slice(0, 2000) : current);
 }

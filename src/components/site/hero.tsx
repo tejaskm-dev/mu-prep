@@ -49,8 +49,8 @@ export function Hero({
         <path d="M-40 20c120 90 150 330 20 560" stroke="currentColor" strokeWidth="1.5" fill="none" />
       </svg>
 
-      <div className="container-page relative grid items-start gap-10 pt-6 pb-8 lg:grid-cols-[minmax(0,1.04fr)_minmax(0,1fr)] lg:gap-6 lg:pt-8">
-        <div className="relative z-20 animate-fade-up">
+      <div className="container-page relative grid grid-cols-1 items-start gap-10 pt-6 pb-8 lg:grid-cols-[minmax(0,1.04fr)_minmax(0,1fr)] lg:gap-6 lg:pt-8">
+        <div className="relative z-20 min-w-0 animate-fade-up">
           <div className="flex flex-wrap items-center gap-3">
             <span className="inline-flex h-7 items-center rounded-md bg-lime-soft px-3 text-[13px] font-medium text-brand">
               Notes Hub

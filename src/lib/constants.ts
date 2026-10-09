@@ -67,6 +67,7 @@ export const PREF_COOKIES = {
 export const NAV_LINKS = [
   { href: "/", label: "Home" },
   { href: "/notes", label: "Notes" },
+  { href: "/important", label: "Important" },
   { href: "/syllabus", label: "Syllabus" },
   { href: "/papers", label: "Previous Papers" },
   { href: "/about", label: "About" },

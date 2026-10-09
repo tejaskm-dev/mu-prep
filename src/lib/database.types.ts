@@ -5,6 +5,10 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type ResourceType = "notes" | "pyq" | "lab" | "assignment" | "qbank" | "syllabus" | "other";
 export type ResourceStatus = "published" | "draft" | "pending" | "rejected";
+export type TopicPriority = "critical" | "high" | "medium";
+
+/** A university question mapped to an important topic (stored in important_topics.questions). */
+export type TopicQuestion = { text: string; marks: number | null; years: string[] };
 
 type ResourceColumns = {
   id: string;
@@ -53,6 +57,21 @@ type SubjectColumns = {
   keywords: string[];
   is_active: boolean;
   sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type ImportantTopicColumns = {
+  id: string;
+  subject_id: string;
+  module: number;
+  title: string;
+  notes: string | null;
+  priority: TopicPriority;
+  questions: Json;
+  sort_order: number;
+  is_published: boolean;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -337,6 +356,44 @@ export type Database = {
         Update: { id?: number; query?: string; results?: number; created_at?: string };
         Relationships: [];
       };
+      important_topics: {
+        Row: ImportantTopicColumns;
+        Insert: Optional<
+          ImportantTopicColumns,
+          "id" | "notes" | "priority" | "questions" | "sort_order" | "is_published" | "created_by" | "created_at" | "updated_at"
+        >;
+        Update: Partial<ImportantTopicColumns>;
+        Relationships: [
+          {
+            foreignKeyName: "important_topics_subject_id_fkey";
+            columns: ["subject_id"];
+            isOneToOne: false;
+            referencedRelation: "subjects";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      important_topic_resources: {
+        Row: { topic_id: string; resource_id: string; page: number | null; sort_order: number };
+        Insert: { topic_id: string; resource_id: string; page?: number | null; sort_order?: number };
+        Update: { topic_id?: string; resource_id?: string; page?: number | null; sort_order?: number };
+        Relationships: [
+          {
+            foreignKeyName: "important_topic_resources_topic_id_fkey";
+            columns: ["topic_id"];
+            isOneToOne: false;
+            referencedRelation: "important_topics";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "important_topic_resources_resource_id_fkey";
+            columns: ["resource_id"];
+            isOneToOne: false;
+            referencedRelation: "resources";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       site_settings: {
         Row: SiteSettingsColumns;
         Insert: Partial<SiteSettingsColumns>;
@@ -351,6 +408,17 @@ export type Database = {
       };
       resource_feed: {
         Row: ResourceFeedRow;
+        Relationships: [];
+      };
+      topic_stats: {
+        Row: {
+          subject_id: string;
+          topic_count: number;
+          critical_count: number;
+          module_count: number;
+          question_count: number;
+          updated_at: string;
+        };
         Relationships: [];
       };
     };
@@ -403,6 +471,7 @@ export type Database = {
     Enums: {
       resource_type: ResourceType;
       resource_status: ResourceStatus;
+      topic_priority: TopicPriority;
     };
     CompositeTypes: Record<string, never>;
   };
@@ -439,3 +508,5 @@ export type NoteRequest = Tables<"note_requests">;
 export type Report = Tables<"reports">;
 export type AdminRow = Tables<"admins">;
 export type SubjectModule = { n: number; title: string };
+export type ImportantTopic = Tables<"important_topics">;
+export type TopicStatsRow = Database["public"]["Views"]["topic_stats"]["Row"];
