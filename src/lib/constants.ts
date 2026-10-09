@@ -62,7 +62,11 @@ export const PREF_COOKIES = {
   department: "mp_dept",
   semester: "mp_sem",
   onboarded: "mp_onboarded",
+  // "all" = also show other branches/semesters; absent or "class" = only the chosen class
+  scope: "mp_scope",
 } as const;
+
+export type ClassScope = "class" | "all";
 
 export const NAV_LINKS = [
   { href: "/", label: "Home" },

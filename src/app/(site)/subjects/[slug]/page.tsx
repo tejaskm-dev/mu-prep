@@ -6,6 +6,7 @@ import { ArrowRight, Download, FileText, FileUp, ScrollText } from "lucide-react
 import { PageLoader } from "@/components/brand/mu-loader";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { Breadcrumbs } from "@/components/site/breadcrumbs";
+import { ClassOnly } from "@/components/site/class-scope";
 import { EmptyState } from "@/components/site/empty-state";
 import { RequestDialog } from "@/components/site/request-dialog";
 import { SubjectCard } from "@/components/site/subject-card";
@@ -85,14 +86,19 @@ async function SubjectContent({ params }: { params: PageProps<"/subjects/[slug]"
         </section>
       ) : null}
       {related.length > 0 ? (
-        <section aria-label="Other subjects this semester">
-          <h2 className="mb-2.5 text-[14px] font-semibold text-ink">More in S{subject.semester}</h2>
-          <div className="flex flex-col gap-2.5">
-            {related.map((s) => (
-              <SubjectCard key={s.id} s={toSubjectCard(s)} className="min-h-[64px] py-2.5 [&>span:first-child]:size-9" />
-            ))}
-          </div>
-        </section>
+        // Prerendered page: "Only my class" is applied in the browser.
+        <ClassOnly departments={[...new Set(related.flatMap((s) => s.department_slugs))]} semester={subject.semester}>
+          <section aria-label="Other subjects this semester">
+            <h2 className="mb-2.5 text-[14px] font-semibold text-ink">More in S{subject.semester}</h2>
+            <div className="flex flex-col gap-2.5">
+              {related.map((s) => (
+                <ClassOnly key={s.id} departments={s.department_slugs} semester={s.semester}>
+                  <SubjectCard s={toSubjectCard(s)} className="min-h-[64px] py-2.5 [&>span:first-child]:size-9" />
+                </ClassOnly>
+              ))}
+            </div>
+          </section>
+        </ClassOnly>
       ) : null}
     </>
   );

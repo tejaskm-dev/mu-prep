@@ -8,6 +8,7 @@ import {
   HomeSemesterPicker,
   PendingArea,
 } from "@/components/site/class-sections";
+import { ClassFocusBar } from "@/components/site/class-scope";
 import { ContinueStrip } from "@/components/site/continue-strip";
 import { EmptyState } from "@/components/site/empty-state";
 import { Hero, HeroChips, HeroChipsSkeleton } from "@/components/site/hero";
@@ -65,8 +66,9 @@ async function ClassSections({ departments }: { departments: Department[] }) {
     getRecentResources({ department: prefs.department, semester: prefs.semester, limit: 24 }),
   ]);
 
-  // If nothing has been uploaded for this class yet, show the latest from everywhere.
-  const needsFallback = Boolean(prefs.department || prefs.semester) && recentForClass.length === 0;
+  // If nothing has been uploaded for this class yet, show the latest from everywhere —
+  // unless "Only my class" is on, which hides other classes everywhere.
+  const needsFallback = !prefs.focus && Boolean(prefs.department || prefs.semester) && recentForClass.length === 0;
   const recent = needsFallback ? await getRecentResources({ limit: 24 }) : recentForClass;
   const deptOptions = departments.map((d) => ({ slug: d.slug, code: d.code, name: d.name, icon: d.icon }));
   const dept = departments.find((d) => d.slug === prefs.department);
@@ -77,20 +79,28 @@ async function ClassSections({ departments }: { departments: Department[] }) {
 
   return (
     <ClassProvider department={prefs.department} semester={prefs.semester}>
-      <section className="container-page mt-12 lg:mt-14" aria-label="Choose your department">
-        {deptOptions.length > 0 ? (
-          <HomeDepartmentPicker departments={deptOptions} />
-        ) : (
-          <EmptyState icon={<GraduationCap />} title="No departments yet">
-            An admin can add departments from the admin panel.
-          </EmptyState>
-        )}
-      </section>
+      {prefs.focus && prefs.semester ? (
+        <section className="container-page mt-12 lg:mt-14" aria-label="Your class">
+          <ClassFocusBar department={dept ?? null} semester={prefs.semester} />
+        </section>
+      ) : (
+        <>
+          <section className="container-page mt-12 lg:mt-14" aria-label="Choose your department">
+            {deptOptions.length > 0 ? (
+              <HomeDepartmentPicker departments={deptOptions} />
+            ) : (
+              <EmptyState icon={<GraduationCap />} title="No departments yet">
+                An admin can add departments from the admin panel.
+              </EmptyState>
+            )}
+          </section>
 
-      <section className="container-page mt-11">
-        <SectionHeading title="Select your semester" action={{ href: `/syllabus${classQuery ? `?${classQuery}` : ""}`, label: "View curriculum" }} />
-        <HomeSemesterPicker />
-      </section>
+          <section className="container-page mt-11">
+            <SectionHeading title="Select your semester" action={{ href: `/syllabus${classQuery ? `?${classQuery}` : ""}`, label: "View curriculum" }} />
+            <HomeSemesterPicker />
+          </section>
+        </>
+      )}
 
       <PendingArea>
         <section className="container-page mt-11">
@@ -117,7 +127,8 @@ async function ClassSections({ departments }: { departments: Department[] }) {
                 </Link>
               }
             >
-              The µLearn team is still adding this semester. Meanwhile, try searching or browse other semesters.
+              The µLearn team is still adding this semester.{" "}
+              {prefs.focus ? "Meanwhile, share what you have or check back soon." : "Meanwhile, try searching or browse other semesters."}
             </EmptyState>
           ) : (
             <div className="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

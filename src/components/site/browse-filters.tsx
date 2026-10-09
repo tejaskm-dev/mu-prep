@@ -25,11 +25,14 @@ export function BrowseFilters({
   departments,
   subjects,
   extraParams = {},
+  classLocked = false,
 }: {
   values: BrowseValues;
   departments: { slug: string; code: string }[];
   subjects: { slug: string; name: string; semester: number }[];
   extraParams?: Record<string, string>;
+  /** "Only my class" is on: branch + semester are fixed, so their pickers are hidden. */
+  classLocked?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -80,19 +83,23 @@ export function BrowseFilters({
             </button>
           ) : null}
         </label>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:flex">
-          <FilterSelect
-            label="Branch"
-            value={values.dept}
-            onChange={(v) => push({ dept: v, subject: "all" })}
-            options={[{ value: "all", label: "All branches" }, ...departments.map((d) => ({ value: d.slug, label: d.code }))]}
-          />
-          <FilterSelect
-            label="Semester"
-            value={values.sem}
-            onChange={(v) => push({ sem: v, subject: "all" })}
-            options={[{ value: "all", label: "All semesters" }, ...SEMESTERS.map((s) => ({ value: String(s), label: `Semester ${s}` }))]}
-          />
+        <div className={cn("grid grid-cols-2 gap-2.5 lg:flex", !classLocked && "sm:grid-cols-4")}>
+          {classLocked ? null : (
+            <>
+              <FilterSelect
+                label="Branch"
+                value={values.dept}
+                onChange={(v) => push({ dept: v, subject: "all" })}
+                options={[{ value: "all", label: "All branches" }, ...departments.map((d) => ({ value: d.slug, label: d.code }))]}
+              />
+              <FilterSelect
+                label="Semester"
+                value={values.sem}
+                onChange={(v) => push({ sem: v, subject: "all" })}
+                options={[{ value: "all", label: "All semesters" }, ...SEMESTERS.map((s) => ({ value: String(s), label: `Semester ${s}` }))]}
+              />
+            </>
+          )}
           <FilterSelect
             label="Subject"
             value={values.subject}

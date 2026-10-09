@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Flame, ScrollText } from "lucide-react";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ClassLinks, readClassParams } from "@/components/site/class-links";
+import { ClassFocusBar } from "@/components/site/class-scope";
 import { EmptyState } from "@/components/site/empty-state";
 import { ModuleHeatStrip, PriorityIcon } from "@/components/topic-bits";
 import type { SubjectOverviewRow, TopicPriority } from "@/lib/database.types";
@@ -48,7 +49,7 @@ export default function ImportantPage({ searchParams }: PageProps<"/important">)
 
 async function ImportantContent({ searchParams }: { searchParams: PageProps<"/important">["searchParams"] }) {
   const [sp, prefs, departments, stats] = await Promise.all([searchParams, getPrefs(), getDepartments(), getTopicStats()]);
-  const { dept, sem } = readClassParams(sp, prefs);
+  const { dept, sem, locked } = readClassParams(sp, prefs);
   const subjects = await getSubjects(dept, sem);
   const withTopics = subjects.filter((s) => stats.has(s.id));
   const without = subjects.filter((s) => !stats.has(s.id));
@@ -72,7 +73,11 @@ async function ImportantContent({ searchParams }: { searchParams: PageProps<"/im
   return (
     <div>
       <div className="mt-6">
-        <ClassLinks base="/important" departments={departments} dept={dept} sem={sem} allowAll />
+        {locked && sem ? (
+          <ClassFocusBar department={departments.find((d) => d.slug === dept) ?? null} semester={sem} />
+        ) : (
+          <ClassLinks base="/important" departments={departments} dept={dept} sem={sem} allowAll />
+        )}
       </div>
 
       {withTopics.length === 0 ? (

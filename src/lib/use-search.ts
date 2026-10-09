@@ -8,7 +8,7 @@ export type SearchResults = { subjects: SubjectCardData[]; resources: ResourceCa
 const memo = new Map<string, SearchResults>();
 
 /** Debounced, cancellable search against /api/search with a small in-memory cache. */
-export function useSearchResults(query: string, prefs: { department: string | null; semester: number | null }) {
+export function useSearchResults(query: string, prefs: { department: string | null; semester: number | null; focus?: boolean }) {
   const [results, setResults] = useState<SearchResults>({ subjects: [], resources: [] });
   const [loading, setLoading] = useState(false);
   const [settled, setSettled] = useState("");
@@ -24,6 +24,7 @@ export function useSearchResults(query: string, prefs: { department: string | nu
     const params = new URLSearchParams({ q });
     if (prefs.department) params.set("dept", prefs.department);
     if (prefs.semester) params.set("sem", String(prefs.semester));
+    if (prefs.focus) params.set("scope", "class");
     const key = params.toString();
     const hit = memo.get(key);
     if (hit) {
@@ -54,7 +55,7 @@ export function useSearchResults(query: string, prefs: { department: string | nu
       controller.abort();
       clearTimeout(timer);
     };
-  }, [query, prefs.department, prefs.semester]);
+  }, [query, prefs.department, prefs.semester, prefs.focus]);
 
   return { results, loading, settled };
 }

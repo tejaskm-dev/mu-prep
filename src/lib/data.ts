@@ -363,27 +363,33 @@ async function cachedSearch(
   semester: number | null,
   type: ResourceType | null,
   limit: number,
+  strict: boolean,
 ) {
   "use cache";
   cacheTag(TAGS.catalog, TAGS.resources);
   cacheLife("minutes");
   const client = publicClient();
+  // strict: only this class ("Only my class"); otherwise the class just ranks higher.
+  const cls = strict
+    ? { p_department: department, p_semester: semester }
+    : { p_boost_department: department, p_boost_semester: semester };
   const [subjects, resources] = await Promise.all([
-    client.rpc("search_subjects", { q, p_boost_department: department, p_boost_semester: semester, p_limit: 6 }),
-    client.rpc("search_resources", { q, p_type: type, p_boost_department: department, p_boost_semester: semester, p_limit: limit }),
+    client.rpc("search_subjects", { q, ...cls, p_limit: 6 }),
+    client.rpc("search_resources", { q, p_type: type, ...cls, p_limit: limit }),
   ]);
   return { subjects: must(subjects) ?? [], resources: must(resources) ?? [] };
 }
 
 export function searchEverything(
   q: string,
-  opts: { department?: string | null; semester?: number | null; type?: ResourceType | null; limit?: number } = {},
+  opts: { department?: string | null; semester?: number | null; type?: ResourceType | null; limit?: number; strict?: boolean } = {},
 ) {
   const query = q.trim().slice(0, 80);
   const empty = { subjects: [] as SubjectOverviewRow[], resources: [] as ResourceFeedRow[] };
   if (!query) return Promise.resolve(empty);
+  const strict = Boolean(opts.strict && opts.department && opts.semester);
   return safe("search", empty, () =>
-    cachedSearch(query.toLowerCase(), opts.department ?? null, opts.semester ?? null, opts.type ?? null, opts.limit ?? 8),
+    cachedSearch(query.toLowerCase(), opts.department ?? null, opts.semester ?? null, opts.type ?? null, opts.limit ?? 8, strict),
   );
 }
 

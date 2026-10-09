@@ -68,15 +68,23 @@ export function ClassLinks({
   );
 }
 
-export function readClassParams(sp: Record<string, string | string[] | undefined>, prefs: { department: string | null; semester: number | null }) {
+/**
+ * The branch + semester a listing should use. While "Only my class" is on (prefs.focus),
+ * it's always the visitor's class and `locked` is true; otherwise URL params win over prefs.
+ */
+export function readClassParams(
+  sp: Record<string, string | string[] | undefined>,
+  prefs: { department: string | null; semester: number | null; focus?: boolean },
+) {
   const get = (k: string) => {
     const v = sp[k];
     return (Array.isArray(v) ? v[0] : v) ?? "";
   };
+  if (prefs.focus) return { dept: prefs.department, sem: prefs.semester, locked: true, get };
   const deptRaw = get("dept");
   const semRaw = get("sem");
   const dept = deptRaw === "all" ? null : /^[a-z0-9-]{1,40}$/.test(deptRaw) ? deptRaw : prefs.department;
   const semNum = Number(semRaw);
   const sem = semRaw === "all" ? null : semNum >= 1 && semNum <= 8 ? semNum : prefs.semester;
-  return { dept, sem, get };
+  return { dept, sem, locked: false, get };
 }
