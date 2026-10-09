@@ -3,11 +3,14 @@
 import { useState, ViewTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { MuLearnLogo, MuPrepLogo } from "@/components/brand/logos";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { NAV_LINKS } from "@/lib/constants";
+import { openSearch } from "@/lib/ui-events";
 import { cn } from "@/lib/utils";
+import type { DepartmentOption } from "./class-picker";
+import { MySpace } from "./my-space";
 
 const IMPORTANT_PATH = /^\/subjects\/[^/]+\/important/;
 
@@ -18,12 +21,17 @@ function isActive(pathname: string, href: string) {
   return pathname.startsWith(href);
 }
 
-export function MainNav() {
+export function MainNav({ departments }: { departments: DepartmentOption[] }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div className="container-page flex h-[72px] items-center gap-4">
+    <div className="container-page relative isolate flex h-[72px] items-center gap-4">
+      {/* Frosted bar behind the nav once the header is stuck (SiteHeader sets data-stuck). */}
+      <span
+        aria-hidden
+        className="absolute inset-x-2 inset-y-2 -z-10 scale-[0.985] rounded-2xl bg-white/90 opacity-0 shadow-lift ring-1 ring-border/80 backdrop-blur-xl transition-[opacity,scale] duration-300 ease-out group-data-[stuck=true]/header:scale-100 group-data-[stuck=true]/header:opacity-100 sm:inset-x-3 lg:inset-x-5"
+      />
       <div className="flex flex-1 items-center gap-3">
         <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>
@@ -89,7 +97,10 @@ export function MainNav() {
               {l.label}
               {active ? (
                 <ViewTransition name="nav-indicator" share="nav-indicator" default="none">
-                  <span aria-hidden className="absolute inset-x-3.5 -bottom-[13px] h-[2.5px] rounded-full bg-lime-strong" />
+                  <span
+                    aria-hidden
+                    className="absolute inset-x-3.5 -bottom-[13px] h-[2.5px] rounded-full bg-lime-strong transition-[bottom] duration-300 group-data-[stuck=true]/header:-bottom-[5px]"
+                  />
                 </ViewTransition>
               ) : null}
             </Link>
@@ -101,8 +112,16 @@ export function MainNav() {
         <Link href="/about" className="mr-3 hidden xl:block" aria-label="About µLearn ASI">
           <MuLearnLogo className="w-[104px]" />
         </Link>
-        {/* Search + My space float above the page (HeaderActions) so they stay on screen while scrolling. */}
-        <span aria-hidden className="w-[90px] shrink-0 sm:w-[92px]" />
+        <button
+          type="button"
+          onClick={() => openSearch()}
+          aria-label="Search (press /)"
+          title="Search  ⌘K"
+          className="inline-flex size-10 items-center justify-center rounded-full border border-border bg-white/70 text-ink transition-colors hover:border-lime-border hover:bg-white"
+        >
+          <Search className="size-[18px]" strokeWidth={2} />
+        </button>
+        <MySpace departments={departments} />
       </div>
     </div>
   );
