@@ -9,6 +9,7 @@ import { useRecent, useSaved } from "@/lib/library-store";
 import type { ResourceCardData } from "@/lib/serialize";
 import { openClassPicker } from "@/lib/ui-events";
 import type { DepartmentOption } from "./class-picker";
+import { ScopeToggle } from "./class-scope";
 
 /** Profile-free personal corner: your class, saved items and recently viewed notes. */
 export function MySpace({ departments }: { departments: DepartmentOption[] }) {
@@ -71,6 +72,7 @@ export function MySpace({ departments }: { departments: DepartmentOption[] }) {
             </span>
             <span className="text-xs font-medium text-brand">Change</span>
           </button>
+          <ScopeToggle />
           <Link
             href="/saved"
             onClick={() => setOpen(false)}

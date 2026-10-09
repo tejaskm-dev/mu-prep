@@ -1,16 +1,24 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { PREF_COOKIES } from "@/lib/constants";
+import { PREF_COOKIES, type ClassScope } from "@/lib/constants";
 
 // The visitor's branch/semester live in plain (non-httpOnly) cookies so the
 // static page shell can personalise itself in the browser without making the
 // server render dynamic.
 
-export type ClientPrefs = { department: string | null; semester: number | null; onboarded: boolean; known: boolean };
+export type ClientPrefs = {
+  department: string | null;
+  semester: number | null;
+  onboarded: boolean;
+  scope: ClassScope;
+  /** A class is chosen and other classes are hidden (see getPrefs). */
+  focus: boolean;
+  known: boolean;
+};
 
 const EVENT = "muprep:prefs";
-const SERVER: ClientPrefs = { department: null, semester: null, onboarded: true, known: false };
+const SERVER: ClientPrefs = { department: null, semester: null, onboarded: true, scope: "class", focus: false, known: false };
 let lastRaw: string | null = null;
 let last: ClientPrefs = SERVER;
 
@@ -26,11 +34,16 @@ function read(): ClientPrefs {
   );
   const dept = jar.get(PREF_COOKIES.department) ?? null;
   const sem = Number(jar.get(PREF_COOKIES.semester));
+  const department = dept && /^[a-z0-9-]{1,40}$/.test(dept) ? dept : null;
+  const semester = Number.isInteger(sem) && sem >= 1 && sem <= 8 ? sem : null;
+  const scope: ClassScope = jar.get(PREF_COOKIES.scope) === "all" ? "all" : "class";
   lastRaw = raw;
   last = {
-    department: dept && /^[a-z0-9-]{1,40}$/.test(dept) ? dept : null,
-    semester: Number.isInteger(sem) && sem >= 1 && sem <= 8 ? sem : null,
+    department,
+    semester,
     onboarded: jar.has(PREF_COOKIES.onboarded) || jar.has(PREF_COOKIES.department),
+    scope,
+    focus: Boolean(department && semester) && scope === "class",
     known: true,
   };
   return last;

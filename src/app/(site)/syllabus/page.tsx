@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, BookMarked, Download, GraduationCap } from "lucide-react";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ClassLinks, readClassParams } from "@/components/site/class-links";
+import { ClassFocusBar } from "@/components/site/class-scope";
 import { EmptyState } from "@/components/site/empty-state";
 import { getDepartments, getSubjects, getSyllabusResources } from "@/lib/data";
 import { formatBytes } from "@/lib/format";
@@ -32,7 +33,7 @@ export default function SyllabusPage({ searchParams }: PageProps<"/syllabus">) {
 
 async function SyllabusContent({ searchParams }: { searchParams: PageProps<"/syllabus">["searchParams"] }) {
   const [sp, prefs, departments] = await Promise.all([searchParams, getPrefs(), getDepartments()]);
-  const { dept, sem } = readClassParams(sp, prefs);
+  const { dept, sem, locked } = readClassParams(sp, prefs);
   const department = dept ?? departments[0]?.slug ?? null;
   const semester = sem ?? 1;
   const subjects = await getSubjects(department, semester);
@@ -42,7 +43,11 @@ async function SyllabusContent({ searchParams }: { searchParams: PageProps<"/syl
   return (
     <div>
       <div className="mt-6">
-        <ClassLinks base="/syllabus" departments={departments} dept={department} sem={semester} />
+        {locked ? (
+          <ClassFocusBar department={deptRow ?? null} semester={semester} />
+        ) : (
+          <ClassLinks base="/syllabus" departments={departments} dept={department} sem={semester} />
+        )}
       </div>
 
       <h2 className="mt-9 mb-4 text-[18px] font-bold text-ink">

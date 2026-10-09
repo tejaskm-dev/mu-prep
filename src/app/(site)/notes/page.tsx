@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, FileSearch } from "lucide-react";
 import { BrowseFilters, type BrowseValues } from "@/components/site/browse-filters";
+import { ClassFocusBar } from "@/components/site/class-scope";
 import { EmptyState } from "@/components/site/empty-state";
 import { ResourceCard } from "@/components/site/resource-card";
 import { SubjectCard } from "@/components/site/subject-card";
@@ -55,8 +56,9 @@ async function NotesContent({ searchParams }: { searchParams: PageProps<"/notes"
   const prefs = await getPrefs();
 
   // Absent params fall back to the visitor's class; "all" means explicitly unfiltered.
-  const deptParam = get("dept") || prefs.department || "all";
-  const semParam = get("sem") || (prefs.semester ? String(prefs.semester) : "all");
+  // With "Only my class" on, the class is fixed and the params are ignored.
+  const deptParam = prefs.focus ? prefs.department! : get("dept") || prefs.department || "all";
+  const semParam = prefs.focus ? String(prefs.semester) : get("sem") || (prefs.semester ? String(prefs.semester) : "all");
   const values: BrowseValues = {
     q: get("q").slice(0, 80),
     dept: deptParam,
@@ -120,8 +122,13 @@ async function NotesContent({ searchParams }: { searchParams: PageProps<"/notes"
         </div>
       </div>
 
+      {prefs.focus && semester ? (
+        <ClassFocusBar className="mb-4" department={dept ?? null} semester={semester} />
+      ) : null}
+
       <BrowseFilters
         values={values}
+        classLocked={prefs.focus}
         departments={departments.map((d) => ({ slug: d.slug, code: d.code }))}
         subjects={subjects.map((s) => ({ slug: s.slug, name: s.name, semester: s.semester }))}
         extraParams={{ ...(values.dept === "all" ? { dept: "all" } : {}), ...(values.sem === "all" ? { sem: "all" } : {}) }}
@@ -149,7 +156,7 @@ async function NotesContent({ searchParams }: { searchParams: PageProps<"/notes"
             icon={<FileSearch />}
             title="Nothing found"
             action={
-              <Link href="/notes?dept=all&sem=all" className="text-sm font-medium text-brand hover:underline">
+              <Link href={prefs.focus ? "/notes" : "/notes?dept=all&sem=all"} className="text-sm font-medium text-brand hover:underline">
                 Clear all filters
               </Link>
             }

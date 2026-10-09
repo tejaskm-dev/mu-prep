@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
     department: params.get("dept"),
     semester: Number.isInteger(sem) && sem >= 1 && sem <= 8 ? sem : null,
     limit: 8,
+    strict: params.get("scope") === "class",
   });
 
   return NextResponse.json(

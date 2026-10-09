@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, BadgeCheck, Download, Eye, ScrollText } from "lucide-react";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { ClassLinks, readClassParams } from "@/components/site/class-links";
+import { ClassFocusBar } from "@/components/site/class-scope";
 import { EmptyState } from "@/components/site/empty-state";
 import { BookStackIllustration } from "@/components/site/illustrations";
 import type { ResourceFeedRow } from "@/lib/database.types";
@@ -38,7 +39,7 @@ export default function PapersPage({ searchParams }: PageProps<"/papers">) {
 
 async function PapersContent({ searchParams }: { searchParams: PageProps<"/papers">["searchParams"] }) {
   const [sp, prefs, departments] = await Promise.all([searchParams, getPrefs(), getDepartments()]);
-  const { dept, sem, get } = readClassParams(sp, prefs);
+  const { dept, sem, locked, get } = readClassParams(sp, prefs);
   const year = Number(get("year")) || null;
   const solvedOnly = get("solved") === "1";
 
@@ -67,7 +68,11 @@ async function PapersContent({ searchParams }: { searchParams: PageProps<"/paper
   return (
     <div>
       <div className="mt-6">
-        <ClassLinks base="/papers" departments={departments} dept={dept} sem={sem} allowAll extra={year ? { year: String(year) } : {}} />
+        {locked && sem ? (
+          <ClassFocusBar department={departments.find((d) => d.slug === dept) ?? null} semester={sem} />
+        ) : (
+          <ClassLinks base="/papers" departments={departments} dept={dept} sem={sem} allowAll extra={year ? { year: String(year) } : {}} />
+        )}
       </div>
 
       {years.length > 0 || all.some((p) => p.tags.includes("solved")) ? (

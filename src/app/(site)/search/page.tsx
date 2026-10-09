@@ -3,13 +3,14 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { after, connection } from "next/server";
 import { FileSearch } from "lucide-react";
+import { ClassFocusBar } from "@/components/site/class-scope";
 import { EmptyState } from "@/components/site/empty-state";
 import { ResourceCard } from "@/components/site/resource-card";
 import { SubjectCard } from "@/components/site/subject-card";
 import { SearchRefine } from "@/components/site/search-refine";
 import { RESOURCE_TYPES } from "@/lib/constants";
 import type { ResourceType } from "@/lib/database.types";
-import { searchEverything } from "@/lib/data";
+import { getDepartments, searchEverything } from "@/lib/data";
 import { getPrefs } from "@/lib/prefs";
 import { toCard, toSubjectCard } from "@/lib/serialize";
 import { hasServiceRole, serviceClient } from "@/lib/supabase/service";
@@ -32,9 +33,9 @@ async function SearchContent({ searchParams }: { searchParams: PageProps<"/searc
   const q = String(Array.isArray(sp.q) ? sp.q[0] : (sp.q ?? "")).trim().slice(0, 80);
   const typeParam = String(sp.type ?? "");
   const type = RESOURCE_TYPES.some((t) => t.value === typeParam) ? (typeParam as ResourceType) : null;
-  const prefs = await getPrefs();
+  const [prefs, departments] = await Promise.all([getPrefs(), getDepartments()]);
   const { subjects, resources } = q
-    ? await searchEverything(q, { department: prefs.department, semester: prefs.semester, type, limit: 48 })
+    ? await searchEverything(q, { department: prefs.department, semester: prefs.semester, type, limit: 48, strict: prefs.focus })
     : { subjects: [], resources: [] };
 
   // Search analytics: lets admins see what students look for (and what's missing).
@@ -49,6 +50,9 @@ async function SearchContent({ searchParams }: { searchParams: PageProps<"/searc
   return (
     <div>
       <SearchRefine initial={q} />
+      {prefs.focus && prefs.semester ? (
+        <ClassFocusBar className="mt-5" department={departments.find((d) => d.slug === prefs.department) ?? null} semester={prefs.semester} />
+      ) : null}
       {q ? (
         <>
           <div className="mt-6 flex flex-wrap items-center gap-2">
