@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ExternalLink } from "lucide-react";
+import { ChevronLeft, ExternalLink, Flame } from "lucide-react";
 import { PageHeader } from "@/components/admin/page-header";
 import { SubjectForm, type SubjectFormValue } from "@/components/admin/subject-form";
 import { getDepartmentOptions } from "@/lib/admin-data";
@@ -62,10 +62,20 @@ export default async function SubjectEditPage({ params }: PageProps<"/admin/subj
         title={isNew ? "New subject" : initial.name}
         description={isNew ? "Add a subject, its modules and the branches that take it." : `${initial.resourceCount} files · /subjects/${initial.slug}`}
         actions={
-          !isNew && initial.isActive ? (
-            <Link href={`/subjects/${initial.slug}`} target="_blank" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand hover:underline">
-              View on site <ExternalLink className="size-3.5" />
-            </Link>
+          !isNew ? (
+            <>
+              <Link
+                href={`/admin/topics/${initial.id}`}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-hot-border bg-hot-soft px-3 text-[13px] font-semibold text-hot-ink hover:bg-hot hover:text-white"
+              >
+                <Flame className="size-3.5" /> Important topics
+              </Link>
+              {initial.isActive ? (
+                <Link href={`/subjects/${initial.slug}`} target="_blank" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand hover:underline">
+                  View on site <ExternalLink className="size-3.5" />
+                </Link>
+              ) : null}
+            </>
           ) : null
         }
       />

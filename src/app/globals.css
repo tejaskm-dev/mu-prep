@@ -56,6 +56,14 @@
   --color-sticky: var(--sticky);
   --color-mu: var(--mu);
   --color-chip: var(--chip);
+  --color-hot: var(--hot);
+  --color-hot-soft: var(--hot-soft);
+  --color-hot-border: var(--hot-border);
+  --color-hot-ink: var(--hot-ink);
+  --color-warm: var(--warm);
+  --color-warm-soft: var(--warm-soft);
+  --color-warm-border: var(--warm-border);
+  --color-warm-ink: var(--warm-ink);
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -131,6 +139,16 @@
   --sticky: #e6f9a6;
   --mu: #6ff93f;
   --chip: #eef0e9;
+
+  /* Important-topic priorities: must know (hot) · high (warm) · good to know (lime) */
+  --hot: #e4572e;
+  --hot-soft: #fdeee7;
+  --hot-border: #f3b9a3;
+  --hot-ink: #9b2c0e;
+  --warm: #e7a40b;
+  --warm-soft: #fdf5dd;
+  --warm-border: #eed38c;
+  --warm-ink: #845500;
 }
 
 @layer base {
@@ -210,6 +228,17 @@
   }
   .chip[data-active="true"] {
     @apply bg-lime-chip text-ink;
+  }
+
+  /* Highlighter stroke for ==marked== words in topic notes and questions */
+  .hl {
+    background: linear-gradient(100deg, transparent 0.5%, var(--sticky) 2%, var(--sticky) 97%, transparent 99%);
+    border-radius: 0.25em;
+    padding: 0 0.18em;
+    color: var(--ink);
+    font-weight: 600;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
   }
 
   .select-tile {

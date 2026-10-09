@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BadgeCheck, FileSearch, LayoutGrid, List, Search, SlidersHorizontal, X } from "lucide-react";
+import Link from "next/link";
+import { BadgeCheck, Flame, FileSearch, LayoutGrid, List, Search, SlidersHorizontal, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RESOURCE_TYPES, SORT_OPTIONS, TAG_LABELS, type SortValue } from "@/lib/constants";
 import { parseExplorerState, type ExplorerState } from "@/lib/explorer-state";
@@ -40,11 +41,14 @@ export function SubjectExplorer({
   modules,
   initial,
   aside,
+  topics,
 }: {
   resources: ResourceCardData[];
   modules: SubjectModule[];
   initial: ExplorerState;
   aside?: React.ReactNode;
+  /** Important-topic counts per module, linking into the topics portal. */
+  topics?: { href: string; counts: Record<number, number> };
 }) {
   const [state, setState] = useState<ExplorerState>(initial);
   const [showFilters, setShowFilters] = useState(false);
@@ -345,14 +349,15 @@ export function SubjectExplorer({
           {moduleList.map((m) => {
             const active = state.module === m.key;
             const count = moduleCounts.get(String(m.key)) ?? 0;
+            const hot = m.key !== "full" ? (topics?.counts[m.key] ?? 0) : 0;
             return (
-              <li key={String(m.key)}>
+              <li key={String(m.key)} className="flex items-start gap-1">
                 <button
                   type="button"
                   aria-pressed={active}
                   onClick={() => update({ module: active ? null : m.key })}
                   className={cn(
-                    "flex w-full items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-lime-soft/70",
+                    "flex min-w-0 flex-1 items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-lime-soft/70",
                     active && "bg-lime-soft",
                   )}
                 >
@@ -372,6 +377,16 @@ export function SubjectExplorer({
                     </span>
                   </span>
                 </button>
+                {hot && topics ? (
+                  <Link
+                    href={`${topics.href}?module=${m.key}`}
+                    title={`${hot} important ${hot === 1 ? "topic" : "topics"} in module ${m.key}`}
+                    className="mt-2 inline-flex h-6 shrink-0 items-center gap-0.5 rounded-full bg-hot-soft px-1.5 text-[11px] font-semibold text-hot-ink ring-1 ring-hot-border/70 hover:bg-hot hover:text-white"
+                  >
+                    <Flame className="size-3" strokeWidth={2.4} />
+                    {hot}
+                  </Link>
+                ) : null}
               </li>
             );
           })}

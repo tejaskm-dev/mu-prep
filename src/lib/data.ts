@@ -6,11 +6,14 @@ import type {
   ResourceType,
   SiteSettings,
   SubjectOverviewRow,
+  TopicPriority,
+  TopicStatsRow,
 } from "@/lib/database.types";
 import { isSupabaseConfigured } from "@/lib/env";
 import type { SortValue } from "@/lib/constants";
 import { publicClient } from "@/lib/supabase/public";
 import { TAGS } from "@/lib/cache-tags";
+import { toTopicViews, type TopicView } from "@/lib/topics";
 
 // Public, read-only queries. Everything goes through RLS as the anon role, so
 // only published resources and active subjects/departments are ever returned.
@@ -450,4 +453,116 @@ async function cachedStats() {
 
 export function getSiteStats() {
   return safe("stats", { resources: 0, subjects: 0, downloads: 0, papers: 0 }, cachedStats);
+}
+
+// ---------------------------------------------------------------- important topics
+
+/**
+ * The topic tables come from a later migration. Until it has been applied, read them as
+ * empty instead of failing every subject page (and the build); other errors still throw.
+ */
+function mustTopics<T>(result: { data: T | null; error: { message: string; code?: string } | null }, empty: T): T {
+  if (result.error && (result.error.code === "PGRST205" || result.error.code === "42P01")) return empty;
+  return must(result) ?? empty;
+}
+
+async function cachedSubjectTopics(subjectId: string) {
+  "use cache";
+  cacheTag(TAGS.topics);
+  cacheLife("hours");
+  const client = publicClient();
+  const topics = mustTopics(
+    await client
+      .from("important_topics")
+      .select("id,module,title,notes,priority,questions")
+      .eq("subject_id", subjectId)
+      .eq("is_published", true)
+      .order("module")
+      .order("sort_order")
+      .order("created_at"),
+    [],
+  );
+  if (topics.length === 0) return { topics, links: [] };
+  const links =
+    must(
+      await client
+        .from("important_topic_resources")
+        .select("topic_id,resource_id,page")
+        .in(
+          "topic_id",
+          topics.map((t) => t.id),
+        )
+        .order("sort_order"),
+    ) ?? [];
+  return { topics, links };
+}
+
+/** Published topics of a subject, with their linked (published) files. */
+export async function getSubjectTopics(subjectId: string): Promise<TopicView[]> {
+  const [data, resources] = await Promise.all([
+    safe("topics", { topics: [], links: [] }, () => cachedSubjectTopics(subjectId)),
+    getSubjectResources(subjectId),
+  ]);
+  return toTopicViews(data.topics, data.links, resources);
+}
+
+async function cachedTopicStats() {
+  "use cache";
+  cacheTag(TAGS.topics, TAGS.catalog);
+  cacheLife("hours");
+  return mustTopics(await publicClient().from("topic_stats").select("*"), []);
+}
+
+/** Topic totals per subject id. */
+export async function getTopicStats(): Promise<Map<string, TopicStatsRow>> {
+  const rows = await safe("topic stats", [] as TopicStatsRow[], cachedTopicStats);
+  return new Map(rows.map((r) => [r.subject_id, r]));
+}
+
+async function cachedTopicModules(subjectIds: string[]) {
+  "use cache";
+  cacheTag(TAGS.topics);
+  cacheLife("hours");
+  return mustTopics(
+    await publicClient().from("important_topics").select("subject_id,module,priority").eq("is_published", true).in("subject_id", subjectIds),
+    [],
+  );
+}
+
+/** Module × priority breakdown for many subjects at once (portal cards). */
+export function getTopicModules(subjectIds: string[]): Promise<{ subject_id: string; module: number; priority: TopicPriority }[]> {
+  if (subjectIds.length === 0) return Promise.resolve([]);
+  return safe("topic modules", [], () => cachedTopicModules([...subjectIds].sort()));
+}
+
+async function cachedResourceTopics(resourceId: string) {
+  "use cache";
+  cacheTag(TAGS.topics);
+  cacheLife("hours");
+  const client = publicClient();
+  const links = mustTopics(await client.from("important_topic_resources").select("topic_id,page").eq("resource_id", resourceId), []);
+  if (links.length === 0) return [];
+  const topics =
+    must(
+      await client
+        .from("important_topics")
+        .select("id,module,title,priority")
+        .in(
+          "id",
+          links.map((l) => l.topic_id),
+        )
+        .eq("is_published", true),
+    ) ?? [];
+  const page = new Map(links.map((l) => [l.topic_id, l.page]));
+  return topics
+    .map((t) => ({ ...t, page: page.get(t.id) ?? null }))
+    .sort((a, b) => a.module - b.module || (a.page ?? 1e9) - (b.page ?? 1e9) || a.title.localeCompare(b.title));
+}
+
+/** Important topics that point at a file (shown on the file page, with page jumps). */
+export function getResourceTopics(
+  resourceId: string,
+): Promise<{ id: string; module: number; title: string; priority: TopicPriority; page: number | null }[]> {
+  if (!/^[0-9a-f-]{36}$/i.test(resourceId)) return Promise.resolve([]);
+  return safe("resource topics", [], () => cachedResourceTopics(resourceId));
 }

@@ -12,9 +12,12 @@ import { cn } from "@/lib/utils";
 import type { DepartmentOption } from "./class-picker";
 import { MySpace } from "./my-space";
 
+const IMPORTANT_PATH = /^\/subjects\/[^/]+\/important/;
+
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
-  if (href === "/notes") return pathname.startsWith("/notes") || pathname.startsWith("/subjects");
+  if (href === "/important") return pathname.startsWith("/important") || IMPORTANT_PATH.test(pathname);
+  if (href === "/notes") return (pathname.startsWith("/notes") || pathname.startsWith("/subjects")) && !IMPORTANT_PATH.test(pathname);
   return pathname.startsWith(href);
 }
 

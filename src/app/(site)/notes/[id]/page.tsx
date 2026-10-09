@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Download, ExternalLink } from "lucide-react";
+import { Download, ExternalLink, Flame } from "lucide-react";
 import { PageLoader } from "@/components/brand/mu-loader";
 import { DynamicIcon } from "@/components/dynamic-icon";
 import { Breadcrumbs } from "@/components/site/breadcrumbs";
@@ -13,9 +13,11 @@ import { ResourceMini } from "@/components/site/resource-card";
 import { SaveButton } from "@/components/site/save-button";
 import { ShareButton } from "@/components/site/share-button";
 import { TrackView } from "@/components/site/track-view";
+import { plainText } from "@/components/rich-text";
+import { PriorityPill } from "@/components/topic-bits";
 import { RESOURCE_TYPE_MAP } from "@/lib/constants";
 import { TimeAgo } from "@/components/time-ago";
-import { getRecentResourceIds, getRelatedResources, getResource, getSubjectBySlug } from "@/lib/data";
+import { getRecentResourceIds, getRelatedResources, getResource, getResourceTopics, getSubjectBySlug } from "@/lib/data";
 import { fileKind, formatBytes, formatDate, formatNumber } from "@/lib/format";
 import { toCard } from "@/lib/serialize";
 import { parseModules } from "@/lib/subject-utils";
@@ -50,7 +52,7 @@ async function ResourceContent({ params }: { params: PageProps<"/notes/[id]">["p
   const r = await getResource(id);
   if (!r) notFound();
 
-  const [related, subject] = await Promise.all([getRelatedResources(r), getSubjectBySlug(r.subject_slug)]);
+  const [related, subject, topics] = await Promise.all([getRelatedResources(r), getSubjectBySlug(r.subject_slug), getResourceTopics(r.id)]);
   const moduleTitle = r.module ? parseModules(subject?.modules ?? null).find((m) => m.n === r.module)?.title : null;
   const isLink = !r.file_url && !!r.external_url;
   const kind = fileKind(r.mime_type, r.file_name, isLink);
@@ -146,6 +148,47 @@ async function ResourceContent({ params }: { params: PageProps<"/notes/[id]">["p
               <ReportDialog resourceId={r.id} />
             </div>
           </section>
+
+          {topics.length > 0 ? (
+            <section aria-label="Important topics in this file" className="overflow-hidden rounded-2xl border border-border bg-white shadow-card">
+              <h2 className="flex items-center gap-2 border-b border-border bg-hot-soft/60 px-4 py-3 text-[14px] font-semibold text-ink">
+                <Flame className="size-4 text-hot" strokeWidth={2.4} /> Important topics in this file
+              </h2>
+              <ul className="divide-y divide-border">
+                {topics.map((t) => (
+                  <li key={t.id} className="flex items-start gap-3 px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <Link
+                        href={`/subjects/${r.subject_slug}/important#topic-${t.id}`}
+                        className="line-clamp-2 text-[13.5px] leading-snug font-semibold text-ink hover:text-brand"
+                      >
+                        {plainText(t.title)}
+                      </Link>
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <PriorityPill priority={t.priority} compact className="h-5 px-1.5 text-[10.5px]" />
+                        <span className="text-[11.5px] text-muted-foreground">Module {t.module}</span>
+                      </div>
+                    </div>
+                    {t.page && kind === "PDF" ? (
+                      <a
+                        href={`#page=${t.page}`}
+                        className="shrink-0 rounded-md bg-sticky px-2 py-1 text-[11.5px] font-bold text-ink tabular-nums hover:bg-lime-chip"
+                        title={`Jump to page ${t.page}`}
+                      >
+                        p.{t.page}
+                      </a>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href={`/subjects/${r.subject_slug}/important`}
+                className="block border-t border-border px-4 py-2.5 text-[12.5px] font-medium text-brand hover:bg-lime-soft/50"
+              >
+                All important topics for {r.subject_short_name ?? r.subject_name} →
+              </Link>
+            </section>
+          ) : null}
 
           {related.length > 0 ? (
             <section aria-label="Related files">

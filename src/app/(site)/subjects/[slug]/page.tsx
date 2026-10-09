@@ -10,8 +10,17 @@ import { EmptyState } from "@/components/site/empty-state";
 import { RequestDialog } from "@/components/site/request-dialog";
 import { SubjectCard } from "@/components/site/subject-card";
 import { SubjectExplorer } from "@/components/site/subject-explorer";
+import { TopicsBanner } from "@/components/site/topics-banner";
 import { Button } from "@/components/ui/button";
-import { getDepartments, getSiteSettings, getSubjectBySlug, getSubjectResources, getSubjectSlugs, getSubjects } from "@/lib/data";
+import {
+  getDepartments,
+  getSiteSettings,
+  getSubjectBySlug,
+  getSubjectResources,
+  getSubjectSlugs,
+  getSubjectTopics,
+  getSubjects,
+} from "@/lib/data";
 import { DEFAULT_EXPLORER_STATE } from "@/lib/explorer-state";
 import { formatNumber } from "@/lib/format";
 import { toCard, toSubjectCard } from "@/lib/serialize";
@@ -46,12 +55,15 @@ async function SubjectContent({ params }: { params: PageProps<"/subjects/[slug]"
   const subject = await getSubjectBySlug(slug);
   if (!subject) notFound();
 
-  const [resources, departments, siblings, settings] = await Promise.all([
+  const [resources, departments, siblings, settings, topics] = await Promise.all([
     getSubjectResources(subject.id),
     getDepartments(),
     getSubjects(null, subject.semester),
     getSiteSettings(),
+    getSubjectTopics(subject.id),
   ]);
+  const topicCounts: Record<number, number> = {};
+  for (const t of topics) topicCounts[t.module] = (topicCounts[t.module] ?? 0) + 1;
 
   const modules = parseModules(subject.modules);
   const deptText = departmentLabel(subject.department_slugs, departments);
@@ -143,6 +155,12 @@ async function SubjectContent({ params }: { params: PageProps<"/subjects/[slug]"
         </div>
       </section>
 
+      {topics.length ? (
+        <div className="mt-5">
+          <TopicsBanner slug={subject.slug} topics={topics} modules={modules} />
+        </div>
+      ) : null}
+
       <div className="mt-8">
         {resources.length === 0 ? (
           <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -168,7 +186,13 @@ async function SubjectContent({ params }: { params: PageProps<"/subjects/[slug]"
             <aside className="flex flex-col gap-5">{related.length ? aside : null}</aside>
           </div>
         ) : (
-          <SubjectExplorer resources={resources.map(toCard)} modules={modules} initial={DEFAULT_EXPLORER_STATE} aside={aside} />
+          <SubjectExplorer
+            resources={resources.map(toCard)}
+            modules={modules}
+            initial={DEFAULT_EXPLORER_STATE}
+            aside={aside}
+            topics={topics.length ? { href: `/subjects/${subject.slug}/important`, counts: topicCounts } : undefined}
+          />
         )}
       </div>
     </div>

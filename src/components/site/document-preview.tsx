@@ -105,6 +105,7 @@ function PdfViewer({ url, title }: { url: string; title: string }) {
   const [current, setCurrent] = useState(1);
   const [fullscreen, setFullscreen] = useState(false);
   const [width, setWidth] = useState(0);
+  const [flash, setFlash] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,6 +140,31 @@ function PdfViewer({ url, title }: { url: string; title: string }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Deep links such as /notes/<id>#page=12 (from important topics) jump to that page and flash it.
+  useEffect(() => {
+    if (!doc || width === 0) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const jump = () => {
+      const n = Number(window.location.hash.match(/^#page=(\d+)$/)?.[1]);
+      const root = container.current;
+      const el = root?.querySelector<HTMLElement>(`[data-page="${n}"]`);
+      if (!root || !el || !n) return;
+      root.parentElement?.scrollIntoView({ block: "start", behavior: "smooth" });
+      root.scrollTo({ top: root.scrollTop + el.getBoundingClientRect().top - root.getBoundingClientRect().top - 12, behavior: "smooth" });
+      setCurrent(n);
+      setFlash(n);
+      clearTimeout(timer);
+      timer = setTimeout(() => setFlash(null), 2600);
+    };
+    const first = setTimeout(jump, 120);
+    window.addEventListener("hashchange", jump);
+    return () => {
+      clearTimeout(first);
+      clearTimeout(timer);
+      window.removeEventListener("hashchange", jump);
+    };
+  }, [doc, width]);
 
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement === container.current?.parentElement);
@@ -209,7 +235,7 @@ function PdfViewer({ url, title }: { url: string; title: string }) {
         {doc && width > 0 ? (
           <div className="mx-auto flex flex-col items-center gap-3" style={{ width: pageWidth }}>
             {Array.from({ length: doc.numPages }, (_, i) => (
-              <PdfPage key={i} doc={doc} number={i + 1} width={pageWidth} ratio={ratio} root={container} onVisible={setCurrent} />
+              <PdfPage key={i} doc={doc} number={i + 1} width={pageWidth} ratio={ratio} root={container} onVisible={setCurrent} flash={flash === i + 1} />
             ))}
           </div>
         ) : (
@@ -242,6 +268,7 @@ function PdfPage({
   ratio,
   root,
   onVisible,
+  flash = false,
 }: {
   doc: PdfDoc;
   number: number;
@@ -249,6 +276,7 @@ function PdfPage({
   ratio: number;
   root: React.RefObject<HTMLDivElement | null>;
   onVisible: (n: number) => void;
+  flash?: boolean;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -306,7 +334,15 @@ function PdfPage({
   }, [near, render]);
 
   return (
-    <div ref={wrapper} className="relative w-full overflow-hidden rounded-sm bg-white shadow-sm" style={{ height }} data-page={number}>
+    <div
+      ref={wrapper}
+      className={cn(
+        "relative w-full overflow-hidden rounded-sm bg-white shadow-sm outline-offset-2 transition-[outline-color] duration-700",
+        flash ? "outline-4 outline-lime-strong" : "outline-4 outline-transparent",
+      )}
+      style={{ height }}
+      data-page={number}
+    >
       <canvas ref={canvasRef} className="block" aria-label={`Page ${number}`} />
     </div>
   );
