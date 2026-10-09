@@ -190,7 +190,7 @@ function PdfViewer({ url, title }: { url: string; title: string }) {
   const pageWidth = Math.max(240, (width - 8) * ZOOMS[zoom]);
 
   return (
-    <div className={cn("overflow-hidden rounded-2xl border border-border bg-[#e9ebe4]", fullscreen && "flex h-full flex-col rounded-none")}>
+    <div className={cn("scroll-mt-20 overflow-hidden rounded-2xl border border-border bg-[#e9ebe4]", fullscreen && "flex h-full flex-col rounded-none")}>
       <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-border bg-white/95 px-3 py-2 backdrop-blur">
         <span className="text-[13px] font-medium text-ink tabular-nums">
           {doc ? (

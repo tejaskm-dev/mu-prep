@@ -1,10 +1,9 @@
 import { AnnouncementBar } from "@/components/site/announcement-bar";
-import { HeaderActions } from "@/components/site/header-actions";
-import { MainNav } from "@/components/site/main-nav";
 import { OnboardingDialog } from "@/components/site/onboarding-dialog";
 import { SearchLauncher } from "@/components/site/search-launcher";
 import { SetupNotice } from "@/components/site/setup-notice";
 import { SiteFooter } from "@/components/site/site-footer";
+import { SiteHeader } from "@/components/site/site-header";
 import { getDepartments, getSiteSettings } from "@/lib/data";
 
 // Static, cached shell: everything personal (class, saved items) is read in the browser.
@@ -17,10 +16,7 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
       <SetupNotice />
       <AnnouncementBar settings={settings} />
       <div className="relative flex flex-1 flex-col">
-        <header className="relative z-30" style={{ viewTransitionName: "site-header" }}>
-          <MainNav />
-        </header>
-        <HeaderActions departments={deptOptions} />
+        <SiteHeader departments={deptOptions} />
         <main className="flex-1">{children}</main>
         <SiteFooter college={settings.college_name} />
       </div>
