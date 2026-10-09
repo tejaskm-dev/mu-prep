@@ -1,4 +1,5 @@
 import { AnnouncementBar } from "@/components/site/announcement-bar";
+import { HeaderActions } from "@/components/site/header-actions";
 import { MainNav } from "@/components/site/main-nav";
 import { OnboardingDialog } from "@/components/site/onboarding-dialog";
 import { SearchLauncher } from "@/components/site/search-launcher";
@@ -15,11 +16,14 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
     <div className="flex min-h-dvh flex-col">
       <SetupNotice />
       <AnnouncementBar settings={settings} />
-      <header className="relative z-30" style={{ viewTransitionName: "site-header" }}>
-        <MainNav departments={deptOptions} />
-      </header>
-      <main className="flex-1">{children}</main>
-      <SiteFooter college={settings.college_name} />
+      <div className="relative flex flex-1 flex-col">
+        <header className="relative z-30" style={{ viewTransitionName: "site-header" }}>
+          <MainNav />
+        </header>
+        <HeaderActions departments={deptOptions} />
+        <main className="flex-1">{children}</main>
+        <SiteFooter college={settings.college_name} />
+      </div>
       <SearchLauncher />
       <OnboardingDialog departments={deptOptions} />
     </div>

@@ -328,14 +328,17 @@
 ::view-transition-new(root) {
   animation: none;
 }
-::view-transition-group(site-header) {
+::view-transition-group(site-header),
+::view-transition-group(site-actions) {
   animation: none;
   z-index: 50;
 }
-::view-transition-old(site-header) {
+::view-transition-old(site-header),
+::view-transition-old(site-actions) {
   display: none;
 }
-::view-transition-new(site-header) {
+::view-transition-new(site-header),
+::view-transition-new(site-actions) {
   animation: none;
 }
 ::view-transition-old(.page-out) {

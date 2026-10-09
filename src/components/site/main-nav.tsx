@@ -3,14 +3,11 @@
 import { useState, ViewTransition } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Search } from "lucide-react";
+import { Menu } from "lucide-react";
 import { MuLearnLogo, MuPrepLogo } from "@/components/brand/logos";
 import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { NAV_LINKS } from "@/lib/constants";
-import { openSearch } from "@/lib/ui-events";
 import { cn } from "@/lib/utils";
-import type { DepartmentOption } from "./class-picker";
-import { MySpace } from "./my-space";
 
 const IMPORTANT_PATH = /^\/subjects\/[^/]+\/important/;
 
@@ -21,7 +18,7 @@ function isActive(pathname: string, href: string) {
   return pathname.startsWith(href);
 }
 
-export function MainNav({ departments }: { departments: DepartmentOption[] }) {
+export function MainNav() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -104,16 +101,8 @@ export function MainNav({ departments }: { departments: DepartmentOption[] }) {
         <Link href="/about" className="mr-3 hidden xl:block" aria-label="About µLearn ASI">
           <MuLearnLogo className="w-[104px]" />
         </Link>
-        <button
-          type="button"
-          onClick={() => openSearch()}
-          aria-label="Search (press /)"
-          title="Search  ⌘K"
-          className="inline-flex size-10 items-center justify-center rounded-full border border-border bg-white/70 text-ink transition-colors hover:border-lime-border hover:bg-white"
-        >
-          <Search className="size-[18px]" strokeWidth={2} />
-        </button>
-        <MySpace departments={departments} />
+        {/* Search + My space float above the page (HeaderActions) so they stay on screen while scrolling. */}
+        <span aria-hidden className="w-[90px] shrink-0 sm:w-[92px]" />
       </div>
     </div>
   );

@@ -335,7 +335,7 @@ export function SubjectExplorer({
       )}
     </div>
 
-    <aside className="flex flex-col gap-5 lg:sticky lg:top-6">
+    <aside className="flex flex-col gap-5 lg:sticky lg:top-20">
       <section className="rounded-xl border border-border bg-white p-4" aria-label="Modules">
         <h2 className="mb-2 flex items-center justify-between text-[14px] font-semibold text-ink">
           Modules
